@@ -43,25 +43,15 @@ def add_to_ledger(query,result):
     entry = result.copy()
     entry.update({
         "query":query,
-        "timestamp":datetime.now().strftime("%H:%M:%S.%f")[:-3],
+        "timestamp":datetime.now().strftime("%H:%M:%S"),
         "hash":hash_entry(result)
     })
     st.session_state.ledger.append(entry)
     st.session_state.session_revenue += entry["value"]
-    st.session_state.latency += entry["latency"]
 
-def generate_audit_zip():
-    buf=io.BytesIO()
-    with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
-        ledger_text="\n".join([json.dumps(e) for e in st.session_state.ledger])
-        zf.writestr("AFEG_AUDIT_EXPORT.txt",ledger_text)
-    buf.seek(0)
-    return buf
-
-# ------------------ UI SETUP (COMMAND CENTER VISUALS) ------------------
+# ------------------ UI SETUP (RESTORED WORDING) ------------------
 st.set_page_config(page_title="AFEG KVU Auditor", layout="wide")
 
-# Custom CSS for the Terminal Feed and High-Tier Metrics
 st.markdown("""
     <style>
     .terminal-box {
@@ -76,102 +66,82 @@ st.markdown("""
         font-size: 13px;
         line-height: 1.6;
     }
-    .stMetric {
-        background-color: #111;
-        border: 1px solid #333;
-        padding: 15px;
-        border-radius: 10px;
-    }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("AFEG KVU // National Economic Auditor")
-st.caption("Live Infrastructure Telemetry Dashboard | Status: AUDIT-READY")
+st.title("AFEG KVU SYSTEM")
 
-# Navigation
-tab1, tab2, tab3, tab4 = st.tabs(["ACT 1: GATEWAY", "ACT 2: LIVE SURGE", "ACT 3: IMMUTABLE VAULT", "ACT 4: TREASURY"])
+# Master Metrics (Top Bar)
+m1, m2, m3 = st.columns(3)
+m1.metric("SESSION TOTAL REVENUE", f"£{st.session_state.session_revenue:,.4f}")
+m2.metric("SESSION TOTAL TAX (20%)", f"£{(st.session_state.session_revenue * VAT_RATE):,.4f}")
+m3.metric("SESSION TOTAL KVU", f"{sum(e['normalized_total'] for e in st.session_state.ledger):,.2f}")
 
-# ------------------ ACT1: QUERY (SINGLE TRANSACTION) ------------------
+# Act Tabs
+tab1, tab2, tab3, tab4 = st.tabs([
+    "ACT 1: GATEWAY SEEDING", 
+    "ACT 2: NATIONAL SIMULATION", 
+    "ACT 3: IMMUTABLE VAULT", 
+    "ACT 4: 24-HOUR ENDURANCE"
+])
+
+# ------------------ ACT 1: GATEWAY SEEDING ------------------
 with tab1:
-    col_a, col_b = st.columns([2,1])
-    with col_a:
-        st.header("Gateway Seeding")
-        query = st.text_input("INPUT UK AI TELEMETRY QUERY:", placeholder="e.g. Logic-gate sync verify...")
-        if st.button("EXECUTE KVU CAPTURE", use_container_width=True):
-            if query:
-                result = simulate_kvu(query)
-                add_to_ledger(query, result)
-                st.success(f"Transaction Finalized. Value Captured: £{result['value']}")
-    
-    with col_b:
-        if st.session_state.ledger:
-            st.subheader("Last Entry Hash")
-            st.code(st.session_state.ledger[-1]['hash'])
+    st.header("ACT 1: GATEWAY SEEDING")
+    query = st.text_input("ENTER UK AI QUERY", placeholder="e.g. Explain the trade model...")
+    if st.button("SUBMIT QUERY"):
+        if query:
+            result = simulate_kvu(query)
+            add_to_ledger(query, result)
+            st.success(f"QUERY REVENUE: £{result['value']:,.4f} | TAX: £{result['vat']:,.4f}")
+            st.json(result)
 
-# ------------------ ACT2: SIMULATION (SURGE WINDOW) ------------------
+# ------------------ ACT 2: NATIONAL SIMULATION ------------------
 with tab2:
-    st.header("Node Simulation Surge")
-    
-    m1, m2, m3 = st.columns(3)
-    rev_ph = m1.empty()
-    kvu_ph = m2.empty()
-    vat_ph = m3.empty()
-    
-    if st.button("TRIGGER NATIONAL SURGE", use_container_width=True):
+    st.header("ACT 2: NATIONAL SIMULATION")
+    if st.button("START NATIONAL SURGE"):
         surge_window = st.empty()
         surge_stream = []
-        
         for i in range(SIMULATION_STEPS):
-            demo_query = f"UK_NODE_REF_{random.randint(1000,9999)}"
+            demo_query = f"UK_NODE_SYNC_{random.randint(100,999)}"
             result = simulate_kvu(demo_query)
             add_to_ledger(demo_query, result)
             
-            # Update Live Dashboard
-            rev_ph.metric("SESSION REVENUE", f"£{st.session_state.session_revenue:,.4f}")
-            kvu_ph.metric("TOTAL NORMALIZED KVU", f"{sum(e['normalized_total'] for e in st.session_state.ledger):,.2f}")
-            vat_ph.metric("VAT LIABILITY (20%)", f"£{(st.session_state.session_revenue * VAT_RATE):,.4f}")
-            
-            # Build Terminal Log
-            log_line = f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] VALIDATED | QUERY: {demo_query} | KVU: {result['normalized_total']} | £{result['value']}"
+            log_line = f"[{datetime.now().strftime('%H:%M:%S')}] SYNC_OK | QUERY: {demo_query} | KVU: {result['normalized_total']} | £{result['value']}"
             surge_stream.insert(0, log_line)
             surge_window.markdown(f'<div class="terminal-box">{"<br>".join(surge_stream[:100])}</div>', unsafe_allow_html=True)
-            
-            time.sleep(0.04)
-        st.toast("Node Surge Complete", icon="✅")
+            time.sleep(0.05)
+            st.rerun() # Refresh metrics at top
 
-# ------------------ ACT 3: THE VAULT (SEARCH BACK IN) ------------------
+# ------------------ ACT 3: IMMUTABLE VAULT (SEARCH) ------------------
 with tab3:
-    st.header("Immutable Audit Vault")
-    
-    search_query = st.text_input("SEARCH LEDGER (By Keyword, Timestamp, or Hash):", placeholder="Search '12:05' or 'Query_45'...")
-    
+    st.header("ACT 3: IMMUTABLE VAULT")
+    search_query = st.text_input("SEARCH AUDIT HISTORY (Keyword or Hash)")
     if st.session_state.ledger:
         if search_query:
-            # Filters the ledger based on the search string
-            filtered_data = [e for e in st.session_state.ledger if search_query.lower() in str(e).lower()]
-            st.write(f"Showing {len(filtered_data)} results for: '{search_query}'")
-            st.table(filtered_data)
+            filtered = [e for e in st.session_state.ledger if search_query.lower() in str(e).lower()]
+            st.write(f"Showing {len(filtered)} results")
+            st.table(filtered)
         else:
-            st.write("Full Audit History (Last 50 Entries):")
-            st.table(st.session_state.ledger[-50:][::-1])
-    else:
-        st.info("Vault is currently empty. Run a simulation to generate records.")
+            st.table(st.session_state.ledger[::-1])
+    
+    if st.button("RESET VAULT VIEW"):
+        st.rerun()
 
-# ------------------ ACT 4: TREASURY (EXPORT) ------------------
+# ------------------ ACT 4: 24-HOUR ENDURANCE ------------------
 with tab4:
-    st.header("Treasury Revenue Portal")
-    col_t1, col_t2 = st.columns(2)
-    
-    with col_t1:
-        st.metric("FINAL REVENUE CAPTURE", f"£{st.session_state.session_revenue:,.4f}")
-        st.write(f"Total Transactions Logged: {len(st.session_state.ledger)}")
-    
-    with col_t2:
-        if st.session_state.ledger:
-            st.download_button(
-                label="DOWNLOAD IMMUTABLE AUDIT ZIP",
-                data=generate_audit_zip(),
-                file_name=f"AFEG_KVU_AUDIT_REPORT.zip",
-                mime="application/zip",
-                use_container_width=True
-            )
+    st.header("ACT 4: 24-HOUR ENDURANCE")
+    if st.button("START 24HR CYCLE SIMULATION"):
+        # Act 4 mirrors Act 2 logic but represents the long-form endurance
+        endurance_window = st.empty()
+        endurance_stream = []
+        for i in range(SIMULATION_STEPS + 50):
+            demo_query = f"ENDURANCE_LOOP_{random.randint(1000,9999)}"
+            result = simulate_kvu(demo_query)
+            add_to_ledger(demo_query, result)
+            
+            log_line = f"[{datetime.now().strftime('%H:%M:%S')}] STABLE | LOOP: {i} | KVU: {result['normalized_total']} | £{result['value']}"
+            endurance_stream.insert(0, log_line)
+            endurance_window.markdown(f'<div class="terminal-box">{"<br>".join(endurance_stream[:100])}</div>', unsafe_allow_html=True)
+            time.sleep(0.04)
+            st.rerun()
