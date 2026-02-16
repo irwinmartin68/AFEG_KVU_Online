@@ -2,7 +2,7 @@ import streamlit as st
 import time, hashlib, json, random
 from datetime import datetime
 
-# ------------------ NATIONAL SCALE CONFIG ------------------
+# ------------------ CONFIG ------------------
 KVU_VALUE = 0.001
 VAT_RATE = 0.20
 NATIONAL_DAILY_KVU = 975_000_000_000 
@@ -91,36 +91,43 @@ if portal_mode == "CEO Gateway":
 
     with tabs[1]:
         st.header("ACT 2: NATIONAL SURGE (975B KVU)")
-        # Placeholders for 6-Grid Matrix
-        g1, g2, g3 = st.columns(3)
-        g4, g5, g6 = st.columns(3)
         
-        # Initialize as empty/zero
-        si, sr, sm = g1.empty(), g2.empty(), g3.empty()
-        sv, stax, stot = g4.empty(), g5.empty(), g6.empty()
+        # DEFINITIVE FIX: Define slots OUTSIDE the button
+        row1 = st.columns(3)
+        row2 = st.columns(3)
         
-        si.metric("INFERENCE", "0")
-        sr.metric("REASONING", "0")
-        sm.metric("MEMORY", "0")
-        sv.metric("VALUE", "£0.00")
-        stax.metric("VAT", "£0.00")
-        stot.metric("BATCH KVU", "0")
+        slot_inf = row1[0].empty()
+        slot_res = row1[1].empty()
+        slot_mem = row1[2].empty()
+        slot_val = row2[0].empty()
+        slot_vat = row2[1].empty()
+        slot_kvu = row2[2].empty()
+
+        # Set to ZERO before start
+        slot_inf.metric("INFERENCE", "0")
+        slot_res.metric("REASONING", "0")
+        slot_mem.metric("MEMORY", "0")
+        slot_val.metric("VALUE", "£0.00")
+        slot_vat.metric("VAT", "£0.00")
+        slot_kvu.metric("BATCH KVU", "0")
 
         if st.button("EXECUTE NATIONAL SURGE"):
             log_win = st.empty()
             logs = []
             batch_size = NATIONAL_DAILY_KVU / 100
+            
             for i in range(100):
+                # Calculate
                 res = simulate_kvu(f"SURGE_NODE_{i}", scale_factor=(batch_size/650))
                 add_to_ledger(f"SURGE_NODE_{i}", res)
                 
-                # Dynamic update of placeholders
-                si.metric("INFERENCE", f"{res['inference']:,.0f}")
-                sr.metric("REASONING", f"{res['reasoning']:,.0f}")
-                sm.metric("MEMORY", f"{res['memory']:,.0f}")
-                sv.metric("VALUE", f"£{res['value']:,.2f}")
-                stax.metric("VAT", f"£{res['vat']:,.2f}")
-                stot.metric("BATCH KVU", f"{res['raw_total']:,.0f}")
+                # FORCE OVERWRITE
+                slot_inf.metric("INFERENCE", f"{res['inference']:,.0f}")
+                slot_res.metric("REASONING", f"{res['reasoning']:,.0f}")
+                slot_mem.metric("MEMORY", f"{res['memory']:,.0f}")
+                slot_val.metric("VALUE", f"£{res['value']:,.2f}")
+                slot_vat.metric("VAT", f"£{res['vat']:,.2f}")
+                slot_kvu.metric("BATCH KVU", f"{res['raw_total']:,.0f}")
                 
                 update_top_metrics()
                 logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] SYNC_OK | +{res['raw_total']:,.0f} KVU")
@@ -129,7 +136,7 @@ if portal_mode == "CEO Gateway":
 
     with tabs[2]:
         st.header("ACT 3: IMMUTABLE VAULT")
-        search = st.text_input("SEARCH LEDGER (Query, Hash, or Timestamp)")
+        search = st.text_input("SEARCH LEDGER")
         if st.session_state.ledger:
             filt = [e for e in st.session_state.ledger if not search or search.lower() in str(e).lower()]
             st.dataframe(filt[::-1], use_container_width=True)
@@ -144,15 +151,12 @@ if portal_mode == "CEO Gateway":
                 res = simulate_kvu(f"24H_NODE_{i}", scale_factor=(sustained_load/650))
                 add_to_ledger(f"24H_NODE_{i}", res)
                 update_top_metrics()
-                e_logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] STABLE | RATE: {res['raw_total']:,.0f} KVU/step | TOTAL VAT: £{(st.session_state.session_revenue * 0.2):,.2f}")
+                e_logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] STABLE | TOTAL VAT: £{(st.session_state.session_revenue * 0.2):,.2f}")
                 e_win.markdown(f'<div class="terminal-box">{"<br>".join(e_logs[:50])}</div>', unsafe_allow_html=True)
                 time.sleep(0.05)
-
 else:
     st.title("HM TREASURY // REGULATORY OVERRIDE")
     key_in = st.text_input("ENTER TREASURY ACCESS KEY:", type="password")
     if key_in == TREASURY_KEY:
-        st.success("AUDIT VAULT UNLOCKED - READ ONLY ACCESS")
-        st.metric("AUDITED NATIONAL REVENUE", f"£{st.session_state.session_revenue:,.2f}")
         st.metric("VAT RECOVERY (20%)", f"£{(st.session_state.session_revenue * 0.2):,.2f}")
         st.dataframe(st.session_state.ledger, use_container_width=True)
