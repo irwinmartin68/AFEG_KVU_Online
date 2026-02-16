@@ -2,48 +2,53 @@ import streamlit as st
 import time, hashlib, json, io, zipfile, random
 from datetime import datetime
 
-# ------------------ CONFIG ------------------
-KVU_VALUE = 0.001
-NORMALIZATION_FACTOR = 0.01
-VAT_RATE = 0.20
+# ------------------ CONFIG (STEP 2, 3, 4) ------------------
+NORMALIZATION_FACTOR = 0.01  # Step 2
+KVU_VALUE = 0.001           # Step 3 (£0.001)
+VAT_RATE = 0.20              # Step 4 (20%)
 SIMULATION_STEPS = 50
 
-# ------------------ SESSION STATE ------------------
+# ------------------ SESSION STATE (STEP 5) ------------------
 if "ledger" not in st.session_state:
     st.session_state.ledger = []
 if "session_revenue" not in st.session_state:
     st.session_state.session_revenue = 0.0
 
-# ------------------ KVU SIMULATION ------------------
+# ------------------ CORE ENGINE (STEPS 1-4) ------------------
 def simulate_kvu(query:str):
-    base = max(len(query),10)
-    inference = base * random.uniform(2.3,2.7)
-    memory = base * random.uniform(1.7,1.9)
-    reasoning = base * random.uniform(2.1,2.3)
-    raw_total = inference+memory+reasoning
-    normalized_total = raw_total*NORMALIZATION_FACTOR
-    value = normalized_total*KVU_VALUE
-    vat = value*VAT_RATE
+    base = max(len(query), 10)
+    
+    # Step 1: Raw Total KVUs
+    inference_kvu = base * random.uniform(2.3, 2.7)
+    memory_kvu = base * random.uniform(1.7, 1.9)
+    reasoning_kvu = base * random.uniform(2.1, 2.3)
+    raw_total = inference_kvu + memory_kvu + reasoning_kvu
+    
+    # Step 2: Normalized KVUs
+    normalized_total = raw_total * NORMALIZATION_FACTOR
+    
+    # Step 3: Value per KVU
+    value = normalized_total * KVU_VALUE
+    
+    # Step 4: VAT
+    vat = value * VAT_RATE
+    
     return {
-        "inference":round(inference,2),
-        "memory":round(memory,2),
-        "reasoning":round(reasoning,2),
-        "raw_total":round(raw_total,2),
-        "normalized_total":round(normalized_total,4),
-        "value":round(value,4),
-        "vat":round(vat,4)
+        "inference": round(inference_kvu, 2),
+        "memory": round(memory_kvu, 2),
+        "reasoning": round(reasoning_kvu, 2),
+        "raw_total": round(raw_total, 2),
+        "normalized_total": round(normalized_total, 4),
+        "value": round(value, 4),
+        "vat": round(vat, 4)
     }
 
-# ------------------ LEDGER & HASH ------------------
-def hash_entry(entry:dict):
-    return hashlib.sha256(json.dumps(entry,sort_keys=True).encode()).hexdigest()
-
-def add_to_ledger(query,result):
+def add_to_ledger(query, result):
     entry = result.copy()
     entry.update({
-        "query":query,
-        "timestamp":datetime.now().strftime("%H:%M:%S"),
-        "hash":hash_entry(result)
+        "query": query,
+        "timestamp": datetime.now().strftime("%H:%M:%S"),
+        "hash": hashlib.sha256(json.dumps(result, sort_keys=True).encode()).hexdigest()
     })
     st.session_state.ledger.append(entry)
     st.session_state.session_revenue += entry["value"]
@@ -68,16 +73,21 @@ st.markdown("""
 
 st.title("AFEG KVU SYSTEM")
 
-# Master Metrics (Linked to dynamic placeholders during simulation)
+# Master Metrics (Step 5)
 m_cols = st.columns(3)
 m_rev = m_cols[0].empty()
 m_tax = m_cols[1].empty()
 m_kvu = m_cols[2].empty()
 
-# Initial display
-m_rev.metric("SESSION TOTAL REVENUE", f"£{st.session_state.session_revenue:,.4f}")
-m_tax.metric("SESSION TOTAL TAX (20%)", f"£{(st.session_state.session_revenue * VAT_RATE):,.4f}")
-m_kvu.metric("SESSION TOTAL KVU", f"{sum(e['normalized_total'] for e in st.session_state.ledger):,.2f}")
+# Refresh UI Totals
+def refresh_metrics():
+    total_kvu = sum(e['normalized_total'] for e in st.session_state.ledger)
+    total_vat = sum(e['vat'] for e in st.session_state.ledger)
+    m_rev.metric("SESSION TOTAL REVENUE", f"£{st.session_state.session_revenue:,.4f}")
+    m_tax.metric("SESSION TOTAL TAX (20%)", f"£{total_vat:,.4f}")
+    m_kvu.metric("SESSION TOTAL KVU", f"{total_kvu:,.2f}")
+
+refresh_metrics()
 
 tab1, tab2, tab3, tab4 = st.tabs([
     "ACT 1: GATEWAY SEEDING", 
@@ -95,10 +105,7 @@ with tab1:
             result = simulate_kvu(query)
             add_to_ledger(query, result)
             st.json(result)
-            # Update main metrics immediately
-            m_rev.metric("SESSION TOTAL REVENUE", f"£{st.session_state.session_revenue:,.4f}")
-            m_tax.metric("SESSION TOTAL TAX (20%)", f"£{(st.session_state.session_revenue * VAT_RATE):,.4f}")
-            m_kvu.metric("SESSION TOTAL KVU", f"{sum(e['normalized_total'] for e in st.session_state.ledger):,.2f}")
+            refresh_metrics()
 
 # ACT 2
 with tab2:
@@ -110,11 +117,7 @@ with tab2:
             node_name = f"Node_Sync_{random.randint(100,999)}"
             res = simulate_kvu(node_name)
             add_to_ledger(node_name, res)
-            
-            # Update main metrics live
-            m_rev.metric("SESSION TOTAL REVENUE", f"£{st.session_state.session_revenue:,.4f}")
-            m_tax.metric("SESSION TOTAL TAX (20%)", f"£{(st.session_state.session_revenue * VAT_RATE):,.4f}")
-            m_kvu.metric("SESSION TOTAL KVU", f"{sum(e['normalized_total'] for e in st.session_state.ledger):,.2f}")
+            refresh_metrics()
             
             line = f"[{datetime.now().strftime('%H:%M:%S')}] QUERY: {node_name} | KVU: {res['normalized_total']} | £{res['value']}"
             logs.insert(0, line)
@@ -142,11 +145,7 @@ with tab4:
             loop_name = f"Endurance_Loop_{i}"
             res = simulate_kvu(loop_name)
             add_to_ledger(loop_name, res)
-            
-            # Update main metrics live
-            m_rev.metric("SESSION TOTAL REVENUE", f"£{st.session_state.session_revenue:,.4f}")
-            m_tax.metric("SESSION TOTAL TAX (20%)", f"£{(st.session_state.session_revenue * VAT_RATE):,.4f}")
-            m_kvu.metric("SESSION TOTAL KVU", f"{sum(e['normalized_total'] for e in st.session_state.ledger):,.2f}")
+            refresh_metrics()
             
             line = f"[{datetime.now().strftime('%H:%M:%S')}] LOOP: {i} | KVU: {res['normalized_total']} | £{res['value']}"
             logs.insert(0, line)
