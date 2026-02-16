@@ -1,7 +1,3 @@
-# AFEG KVU – Professional Online Dashboard (All-in-One)
-# Save as: 1afeg_kvu_app.py
-# Run: streamlit run 1afeg_kvu_app.py
-
 import streamlit as st
 import time, hashlib, json, io, zipfile, random
 from datetime import datetime
@@ -13,8 +9,7 @@ VAT_RATE = 0.20
 SIMULATION_STEPS = 50
 
 # ------------------ SESSION STATE ------------------
-for key, default in [("ledger", []), ("session_revenue", 0.0), ("latency", 0.0), 
-                     ("view","All"), ("text_size",16)]:
+for key, default in [("ledger", []), ("session_revenue", 0.0), ("latency", 0.0)]:
     if key not in st.session_state:
         st.session_state[key] = default
 
@@ -46,7 +41,11 @@ def hash_entry(entry:dict):
 
 def add_to_ledger(query,result):
     entry = result.copy()
-    entry.update({"query":query,"timestamp":datetime.now().isoformat(),"hash":hash_entry(result)})
+    entry.update({
+        "query":query,
+        "timestamp":datetime.now().strftime("%H:%M:%S.%f")[:-3],
+        "hash":hash_entry(result)
+    })
     st.session_state.ledger.append(entry)
     st.session_state.session_revenue += entry["value"]
     st.session_state.latency += entry["latency"]
@@ -55,83 +54,124 @@ def generate_audit_zip():
     buf=io.BytesIO()
     with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as zf:
         ledger_text="\n".join([json.dumps(e) for e in st.session_state.ledger])
-        zf.writestr("AFEG_IMMUTABLE_AUDIT_LEDGER.txt",ledger_text)
+        zf.writestr("AFEG_AUDIT_EXPORT.txt",ledger_text)
     buf.seek(0)
     return buf
 
-# ------------------ UI SETUP ------------------
-st.set_page_config(page_title="AFEG KVU Dashboard",layout="wide")
-st.title("AFEG KVU – Full Professional Online Simulation")
-st.caption("Athena Fabric v4 Simulation | Live KVU Tracking")
+# ------------------ UI SETUP (COMMAND CENTER VISUALS) ------------------
+st.set_page_config(page_title="AFEG KVU Auditor", layout="wide")
 
-# Sidebar controls
-st.sidebar.title("Controls")
-st.session_state.view = st.sidebar.radio("Metric View", ["All","Inference","Memory","Reasoning"])
-st.session_state.text_size = st.sidebar.slider("Text Size",12,24,16)
+# Custom CSS for the Terminal Feed and High-Tier Metrics
+st.markdown("""
+    <style>
+    .terminal-box {
+        background-color: #050505;
+        color: #00FF41;
+        padding: 20px;
+        border-radius: 8px;
+        border: 2px solid #1A1A1A;
+        font-family: 'Courier New', Courier, monospace;
+        height: 400px;
+        overflow-y: scroll;
+        font-size: 13px;
+        line-height: 1.6;
+    }
+    .stMetric {
+        background-color: #111;
+        border: 1px solid #333;
+        padding: 15px;
+        border-radius: 10px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-# Tabs for Acts
-tab1,tab2,tab3,tab4=st.tabs(["Act1: Query","Act2: Simulation","Act3: Ledger","Act4: Treasury"])
+st.title("AFEG KVU // National Economic Auditor")
+st.caption("Live Infrastructure Telemetry Dashboard | Status: AUDIT-READY")
 
-# ------------------ ACT1: QUERY ------------------
+# Navigation
+tab1, tab2, tab3, tab4 = st.tabs(["ACT 1: GATEWAY", "ACT 2: LIVE SURGE", "ACT 3: IMMUTABLE VAULT", "ACT 4: TREASURY"])
+
+# ------------------ ACT1: QUERY (SINGLE TRANSACTION) ------------------
 with tab1:
-    st.header("Submit a Live Query")
-    query = st.text_input("Enter your question for KVU calculation:")
-    if st.button("Submit Query",key="submit"):
-        if query:
-            result=simulate_kvu(query)
-            add_to_ledger(query,result)
-            st.success("Query submitted!")
-            st.json(result)
+    col_a, col_b = st.columns([2,1])
+    with col_a:
+        st.header("Gateway Seeding")
+        query = st.text_input("INPUT UK AI TELEMETRY QUERY:", placeholder="e.g. Logic-gate sync verify...")
+        if st.button("EXECUTE KVU CAPTURE", use_container_width=True):
+            if query:
+                result = simulate_kvu(query)
+                add_to_ledger(query, result)
+                st.success(f"Transaction Finalized. Value Captured: £{result['value']}")
+    
+    with col_b:
+        if st.session_state.ledger:
+            st.subheader("Last Entry Hash")
+            st.code(st.session_state.ledger[-1]['hash'])
 
-# ------------------ ACT2: SIMULATION ------------------
+# ------------------ ACT2: SIMULATION (SURGE WINDOW) ------------------
 with tab2:
-    st.header("Run Demo Simulation")
-    if st.button("Run Simulation"):
-        progress=st.progress(0)
+    st.header("Node Simulation Surge")
+    
+    m1, m2, m3 = st.columns(3)
+    rev_ph = m1.empty()
+    kvu_ph = m2.empty()
+    vat_ph = m3.empty()
+    
+    if st.button("TRIGGER NATIONAL SURGE", use_container_width=True):
+        surge_window = st.empty()
+        surge_stream = []
+        
         for i in range(SIMULATION_STEPS):
-            demo_query=f"Demo Query {i+1}"
-            result=simulate_kvu(demo_query)
-            add_to_ledger(demo_query,result)
-            progress.progress((i+1)/SIMULATION_STEPS)
-            time.sleep(0.05)
-        st.success(f"Simulation finished ({SIMULATION_STEPS} steps)")
+            demo_query = f"UK_NODE_REF_{random.randint(1000,9999)}"
+            result = simulate_kvu(demo_query)
+            add_to_ledger(demo_query, result)
+            
+            # Update Live Dashboard
+            rev_ph.metric("SESSION REVENUE", f"£{st.session_state.session_revenue:,.4f}")
+            kvu_ph.metric("TOTAL NORMALIZED KVU", f"{sum(e['normalized_total'] for e in st.session_state.ledger):,.2f}")
+            vat_ph.metric("VAT LIABILITY (20%)", f"£{(st.session_state.session_revenue * VAT_RATE):,.4f}")
+            
+            # Build Terminal Log
+            log_line = f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] VALIDATED | QUERY: {demo_query} | KVU: {result['normalized_total']} | £{result['value']}"
+            surge_stream.insert(0, log_line)
+            surge_window.markdown(f'<div class="terminal-box">{"<br>".join(surge_stream[:100])}</div>', unsafe_allow_html=True)
+            
+            time.sleep(0.04)
+        st.toast("Node Surge Complete", icon="✅")
 
-    if st.session_state.ledger:
-        st.subheader("Live Metrics")
-        total_inference=sum(e["inference"] for e in st.session_state.ledger)
-        total_memory=sum(e["memory"] for e in st.session_state.ledger)
-        total_reasoning=sum(e["reasoning"] for e in st.session_state.ledger)
-        total_kvus=sum(e["normalized_total"] for e in st.session_state.ledger)
-        total_value=sum(e["value"] for e in st.session_state.ledger)
-        total_vat=sum(e["vat"] for e in st.session_state.ledger)
-        total_latency=sum(e["latency"] for e in st.session_state.ledger)
-
-        if st.session_state.view in ["All","Inference"]:
-            st.markdown(f"<p style='font-size:{st.session_state.text_size}px'>Inference KVU: {round(total_inference,2)}</p>",unsafe_allow_html=True)
-        if st.session_state.view in ["All","Memory"]:
-            st.markdown(f"<p style='font-size:{st.session_state.text_size}px'>Memory KVU: {round(total_memory,2)}</p>",unsafe_allow_html=True)
-        if st.session_state.view in ["All","Reasoning"]:
-            st.markdown(f"<p style='font-size:{st.session_state.text_size}px'>Reasoning KVU: {round(total_reasoning,2)}</p>",unsafe_allow_html=True)
-        st.markdown(f"<p style='font-size:{st.session_state.text_size}px'>Normalized KVUs: {round(total_kvus,4)}</p>",unsafe_allow_html=True)
-        st.markdown(f"<p style='font-size:{st.session_state.text_size}px'>Total Value (£): {round(total_value,4)}</p>",unsafe_allow_html=True)
-        st.markdown(f"<p style='font-size:{st.session_state.text_size}px'>VAT (£): {round(total_vat,4)}</p>",unsafe_allow_html=True)
-        st.markdown(f"<p style='font-size:{st.session_state.text_size}px'>Total Latency (s): {round(total_latency,3)}</p>",unsafe_allow_html=True)
-
-# ------------------ ACT3: LEDGER ------------------
+# ------------------ ACT 3: THE VAULT (SEARCH BACK IN) ------------------
 with tab3:
-    st.header("Immutable Audit Ledger")
+    st.header("Immutable Audit Vault")
+    
+    search_query = st.text_input("SEARCH LEDGER (By Keyword, Timestamp, or Hash):", placeholder="Search '12:05' or 'Query_45'...")
+    
     if st.session_state.ledger:
-        st.write("Last 10 entries")
-        for e in st.session_state.ledger[-10:]:
-            st.json(e)
+        if search_query:
+            # Filters the ledger based on the search string
+            filtered_data = [e for e in st.session_state.ledger if search_query.lower() in str(e).lower()]
+            st.write(f"Showing {len(filtered_data)} results for: '{search_query}'")
+            st.table(filtered_data)
+        else:
+            st.write("Full Audit History (Last 50 Entries):")
+            st.table(st.session_state.ledger[-50:][::-1])
+    else:
+        st.info("Vault is currently empty. Run a simulation to generate records.")
 
-# ------------------ ACT4: TREASURY ------------------
+# ------------------ ACT 4: TREASURY (EXPORT) ------------------
 with tab4:
-    st.header("Treasury Vault")
-    if st.session_state.ledger:
-        st.download_button(
-            label="Download Secure Audit ZIP",
-            data=generate_audit_zip(),
-            file_name="AFEG_IMMUTABLE_AUDIT_LEDGER.zip",
-            mime="application/zip"
-        )
+    st.header("Treasury Revenue Portal")
+    col_t1, col_t2 = st.columns(2)
+    
+    with col_t1:
+        st.metric("FINAL REVENUE CAPTURE", f"£{st.session_state.session_revenue:,.4f}")
+        st.write(f"Total Transactions Logged: {len(st.session_state.ledger)}")
+    
+    with col_t2:
+        if st.session_state.ledger:
+            st.download_button(
+                label="DOWNLOAD IMMUTABLE AUDIT ZIP",
+                data=generate_audit_zip(),
+                file_name=f"AFEG_KVU_AUDIT_REPORT.zip",
+                mime="application/zip",
+                use_container_width=True
+            )
