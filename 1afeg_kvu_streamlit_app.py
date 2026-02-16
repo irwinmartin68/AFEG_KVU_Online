@@ -7,7 +7,7 @@ KVU_VALUE = 0.001
 VAT_RATE = 0.20
 NATIONAL_DAILY_KVU = 975_000_000_000 
 SIM_STEPS = 100 
-ENDURANCE_STEPS = 150
+ENDURANCE_STEPS = 200 # Extended for visual stability
 TREASURY_KEY = "AFEG-V7-TREASURY-2026"
 
 # ------------------ SESSION STATE ------------------
@@ -24,43 +24,33 @@ if "current_result" not in st.session_state:
 def simulate_kvu(query:str, scale_factor=1.0):
     base = (400 + (len(query) * 10)) * scale_factor
     q_low = query.lower()
-    
     if any(w in q_low for w in ["why", "how", "explain"]):
         inf, res, mem = base * 0.8, base * 1.2, base * 0.1
     elif any(w in q_low for w in ["what", "who", "where", "when"]):
         inf, res, mem = base * 0.5, base * 0.1, base * 1.5
     else:
         inf, res, mem = base * 1.0, base * 0.1, base * 0.2
-        
     raw_total = inf + res + mem
     value = raw_total * KVU_VALUE
     vat = value * VAT_RATE
-    
     return {
-        "inference": round(inf, 2),
-        "reasoning": round(res, 2),
-        "memory": round(mem, 2),
-        "raw_total": round(raw_total, 2),
-        "value": round(value, 4),
-        "vat": round(vat, 4)
+        "inference": round(inf, 2), "reasoning": round(res, 2), "memory": round(mem, 2),
+        "raw_total": round(raw_total, 2), "value": round(value, 4), "vat": round(vat, 4)
     }
 
 def add_to_ledger(query, result, is_act1=False):
     entry = result.copy()
     entry.update({
-        "query": query,
-        "timestamp": datetime.now().strftime("%H:%M:%S"),
+        "query": query, "timestamp": datetime.now().strftime("%H:%M:%S"),
         "hash": hashlib.sha256(json.dumps(result, sort_keys=True).encode()).hexdigest()
     })
     st.session_state.ledger.append(entry)
     st.session_state.session_revenue += entry["value"]
-    if is_act1:
-        st.session_state.act1_subtotal += entry["value"]
+    if is_act1: st.session_state.act1_subtotal += entry["value"]
     st.session_state.current_result = entry
 
 # ------------------ UI SETUP ------------------
 st.set_page_config(page_title="AFEG National Auditor", layout="wide")
-
 st.sidebar.title("AFEG KVU CONTROLS")
 mode = st.sidebar.selectbox("ACCESS PORTAL", ["CEO Gateway", "Treasury Key Portal"])
 text_size = st.sidebar.slider("TEXT SIZE", 10, 30, 14)
@@ -68,25 +58,17 @@ text_size = st.sidebar.slider("TEXT SIZE", 10, 30, 14)
 st.markdown(f"""
     <style>
     .terminal-box {{
-        background-color: #000000;
-        color: #00FF41;
-        padding: 20px;
-        font-family: monospace;
-        height: 400px;
-        overflow-y: scroll;
-        white-space: pre-wrap;
-        font-size: {text_size}px;
+        background-color: #000000; color: #00FF41; padding: 20px;
+        font-family: monospace; height: 400px; overflow-y: scroll;
+        white-space: pre-wrap; font-size: {text_size}px;
     }}
     </style>
     """, unsafe_allow_html=True)
 
 if mode == "CEO Gateway":
     st.title("AFEG CEO COMMAND CENTER")
-    
     m_cols = st.columns(3)
-    m_rev = m_cols[0].empty()
-    m_tax = m_cols[1].empty()
-    m_kvu = m_cols[2].empty()
+    m_rev, m_tax, m_kvu = m_cols[0].empty(), m_cols[1].empty(), m_cols[2].empty()
 
     def update_top_metrics():
         m_rev.metric("SESSION GROSS VALUE", f"£{st.session_state.session_revenue:,.2f}")
@@ -94,7 +76,6 @@ if mode == "CEO Gateway":
         m_kvu.metric("TOTAL KVUs VALIDATED", f"{sum(e['raw_total'] for e in st.session_state.ledger):,.0f}")
 
     update_top_metrics()
-
     tab1, tab2, tab3, tab4 = st.tabs(["ACT 1: GATEWAY", "ACT 2: NATIONAL SURGE", "ACT 3: VAULT", "ACT 4: ENDURANCE"])
 
     with tab1:
@@ -105,7 +86,6 @@ if mode == "CEO Gateway":
                 result = simulate_kvu(query)
                 add_to_ledger(query, result, is_act1=True)
                 st.rerun()
-
         if st.session_state.current_result:
             res = st.session_state.current_result
             r1c1, r1c2, r1c3 = st.columns(3)
@@ -118,7 +98,7 @@ if mode == "CEO Gateway":
             r2c3.metric("ACT SUBTOTAL", f"£{st.session_state.act1_subtotal:,.4f}")
 
     with tab2:
-        st.header("ACT 2: NATIONAL SIMULATION (975B KVU)")
+        st.header("ACT 2: NATIONAL SURGE (975B KVU)")
         g1, g2, g3 = st.columns(3)
         ginf, gres, gmem = g1.empty(), g2.empty(), g3.empty()
         g4, g5, g6 = st.columns(3)
@@ -131,36 +111,39 @@ if mode == "CEO Gateway":
             for i in range(SIM_STEPS):
                 res = simulate_kvu(f"NODE_UK_{i}", scale_factor=(batch_size/650))
                 add_to_ledger(f"NODE_UK_{i}", res)
-                
                 ginf.metric("INFERENCE", f"{res['inference']:,.0f}")
                 gres.metric("REASONING", f"{res['reasoning']:,.0f}")
                 gmem.metric("MEMORY", f"{res['memory']:,.0f}")
                 grev.metric("REVENUE CAPTURED", f"£{res['value']:,.2f}")
                 gvat.metric("VAT CAPTURED", f"£{res['vat']:,.2f}")
                 gtot.metric("UNIT TOTAL (RAW)", f"{res['raw_total']:,.0f}")
-                
                 update_top_metrics()
-                
                 logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] SYNC_OK | +{res['raw_total']:,.0f} KVU")
                 window.markdown(f'<div class="terminal-box">{"<br>".join(logs[:50])}</div>', unsafe_allow_html=True)
                 time.sleep(0.05)
 
     with tab3:
         st.header("ACT 3: IMMUTABLE VAULT")
-        st.dataframe(st.session_state.ledger[::-1], use_container_width=True)
+        search_query = st.text_input("SEARCH AUDIT HISTORY")
+        if st.session_state.ledger:
+            filtered_data = [e for e in st.session_state.ledger if not search_query or search_query.lower() in str(e).lower()]
+            st.dataframe(filtered_data[::-1], use_container_width=True)
 
     with tab4:
         st.header("ACT 4: 24-HOUR ENDURANCE")
-        if st.button("START ENDURANCE CYCLE"):
+        st.info("Demonstrating National System Stability under 24-Hour Sustained Load.")
+        if st.button("START SUSTAINED LOAD TEST"):
             window_4 = st.empty()
             logs_4 = []
+            # Scaling for continuous 24-hour background traffic
+            sustained_scale = (NATIONAL_DAILY_KVU / 24) / 3600 # Per second load
             for i in range(ENDURANCE_STEPS):
-                res = simulate_kvu(f"Endurance_{i}")
-                add_to_ledger(f"Endurance_{i}", res)
+                res = simulate_kvu(f"Sustained_Traffic_{i}", scale_factor=(sustained_scale/650))
+                add_to_ledger(f"Sustained_Traffic_{i}", res)
                 update_top_metrics()
-                logs_4.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] STABLE | {res['raw_total']:,} KVU | £{res['value']:.4f}")
+                logs_4.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] STABLE | RATE: {res['raw_total']:,.0f} KVU/s | VALUE: £{res['value']:.2f}")
                 window_4.markdown(f'<div class="terminal-box">{"<br>".join(logs_4[:50])}</div>', unsafe_allow_html=True)
-                time.sleep(0.02)
+                time.sleep(0.1)
 
 else:
     st.title("HM TREASURY // REGULATORY OVERRIDE")
