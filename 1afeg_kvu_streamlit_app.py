@@ -5,7 +5,6 @@ from datetime import datetime
 # ------------------ NATIONAL SCALE CONFIG ------------------
 KVU_VALUE = 0.001
 VAT_RATE = 0.20
-# Total target for a full UK day across all providers
 NATIONAL_DAILY_KVU = 975_000_000_000 
 TREASURY_KEY = "AFEG-V7-TREASURY-2026"
 
@@ -56,15 +55,11 @@ text_size = st.sidebar.slider("TEXT SIZE", 10, 30, 14)
 
 st.markdown(f"<style>.terminal-box {{background-color:#000; color:#00FF41; padding:20px; font-family:monospace; height:400px; overflow-y:scroll; font-size:{text_size}px;}}</style>", unsafe_allow_html=True)
 
-# ------------------ PORTAL LOGIC ------------------
 if portal_mode == "CEO Gateway":
     st.title("AFEG CEO COMMAND CENTER")
     
-    # Top Metrics
     m_cols = st.columns(3)
-    m_rev = m_cols[0].empty()
-    m_tax = m_cols[1].empty()
-    m_kvu = m_cols[2].empty()
+    m_rev, m_tax, m_kvu = m_cols[0].empty(), m_cols[1].empty(), m_cols[2].empty()
 
     def update_top_metrics():
         total_kvu = sum(e['raw_total'] for e in st.session_state.ledger)
@@ -96,10 +91,21 @@ if portal_mode == "CEO Gateway":
 
     with tabs[1]:
         st.header("ACT 2: NATIONAL SURGE (975B KVU)")
-        s_cols = st.columns(3)
-        si, sr, sm = s_cols[0].empty(), s_cols[1].empty(), s_cols[2].empty()
-        sv, stax, stot = st.columns(3)[0].empty(), st.columns(3)[1].empty(), st.columns(3)[2].empty()
+        # Placeholders for 6-Grid Matrix
+        g1, g2, g3 = st.columns(3)
+        g4, g5, g6 = st.columns(3)
         
+        # Initialize as empty/zero
+        si, sr, sm = g1.empty(), g2.empty(), g3.empty()
+        sv, stax, stot = g4.empty(), g5.empty(), g6.empty()
+        
+        si.metric("INFERENCE", "0")
+        sr.metric("REASONING", "0")
+        sm.metric("MEMORY", "0")
+        sv.metric("VALUE", "£0.00")
+        stax.metric("VAT", "£0.00")
+        stot.metric("BATCH KVU", "0")
+
         if st.button("EXECUTE NATIONAL SURGE"):
             log_win = st.empty()
             logs = []
@@ -107,12 +113,15 @@ if portal_mode == "CEO Gateway":
             for i in range(100):
                 res = simulate_kvu(f"SURGE_NODE_{i}", scale_factor=(batch_size/650))
                 add_to_ledger(f"SURGE_NODE_{i}", res)
+                
+                # Dynamic update of placeholders
                 si.metric("INFERENCE", f"{res['inference']:,.0f}")
                 sr.metric("REASONING", f"{res['reasoning']:,.0f}")
                 sm.metric("MEMORY", f"{res['memory']:,.0f}")
                 sv.metric("VALUE", f"£{res['value']:,.2f}")
                 stax.metric("VAT", f"£{res['vat']:,.2f}")
                 stot.metric("BATCH KVU", f"{res['raw_total']:,.0f}")
+                
                 update_top_metrics()
                 logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] SYNC_OK | +{res['raw_total']:,.0f} KVU")
                 log_win.markdown(f'<div class="terminal-box">{"<br>".join(logs[:50])}</div>', unsafe_allow_html=True)
@@ -130,7 +139,6 @@ if portal_mode == "CEO Gateway":
         if st.button("START SUSTAINED LOAD TEST"):
             e_win = st.empty()
             e_logs = []
-            # This simulates the full 975B KVU / £195M VAT target over 150 steps
             sustained_load = NATIONAL_DAILY_KVU / 150
             for i in range(150):
                 res = simulate_kvu(f"24H_NODE_{i}", scale_factor=(sustained_load/650))
@@ -148,5 +156,3 @@ else:
         st.metric("AUDITED NATIONAL REVENUE", f"£{st.session_state.session_revenue:,.2f}")
         st.metric("VAT RECOVERY (20%)", f"£{(st.session_state.session_revenue * 0.2):,.2f}")
         st.dataframe(st.session_state.ledger, use_container_width=True)
-    elif key_in:
-        st.error("INVALID KEY")
