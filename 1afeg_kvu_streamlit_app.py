@@ -65,7 +65,6 @@ st.sidebar.title("AFEG KVU CONTROLS")
 mode = st.sidebar.selectbox("ACCESS PORTAL", ["CEO Gateway", "Treasury Key Portal"])
 text_size = st.sidebar.slider("TEXT SIZE", 10, 30, 14)
 
-# Global Terminal Style
 st.markdown(f"""
     <style>
     .terminal-box {{
@@ -84,7 +83,6 @@ st.markdown(f"""
 if mode == "CEO Gateway":
     st.title("AFEG CEO COMMAND CENTER")
     
-    # Global Session Metrics (Top Bar)
     m_cols = st.columns(3)
     m_rev = m_cols[0].empty()
     m_tax = m_cols[1].empty()
@@ -99,7 +97,6 @@ if mode == "CEO Gateway":
 
     tab1, tab2, tab3, tab4 = st.tabs(["ACT 1: GATEWAY", "ACT 2: NATIONAL SURGE", "ACT 3: VAULT", "ACT 4: ENDURANCE"])
 
-    # ACT 1
     with tab1:
         st.header("ACT 1: GATEWAY SEEDING")
         query = st.text_input("ENTER UK AI QUERY")
@@ -111,7 +108,6 @@ if mode == "CEO Gateway":
 
         if st.session_state.current_result:
             res = st.session_state.current_result
-            st.divider()
             r1c1, r1c2, r1c3 = st.columns(3)
             r1c1.metric("INFERENCE", f"{res['inference']:,}")
             r1c2.metric("REASONING", f"{res['reasoning']:,}")
@@ -121,7 +117,6 @@ if mode == "CEO Gateway":
             r2c2.metric("VAT CAPTURED", f"£{res['vat']:,.4f}")
             r2c3.metric("ACT SUBTOTAL", f"£{st.session_state.act1_subtotal:,.4f}")
 
-    # ACT 2
     with tab2:
         st.header("ACT 2: NATIONAL SIMULATION (975B KVU)")
         g1, g2, g3 = st.columns(3)
@@ -137,7 +132,6 @@ if mode == "CEO Gateway":
                 res = simulate_kvu(f"NODE_UK_{i}", scale_factor=(batch_size/650))
                 add_to_ledger(f"NODE_UK_{i}", res)
                 
-                # Update 6-Grid Live
                 ginf.metric("INFERENCE", f"{res['inference']:,.0f}")
                 gres.metric("REASONING", f"{res['reasoning']:,.0f}")
                 gmem.metric("MEMORY", f"{res['memory']:,.0f}")
@@ -151,15 +145,10 @@ if mode == "CEO Gateway":
                 window.markdown(f'<div class="terminal-box">{"<br>".join(logs[:50])}</div>', unsafe_allow_html=True)
                 time.sleep(0.05)
 
-    # ACT 3
     with tab3:
         st.header("ACT 3: IMMUTABLE VAULT")
-        if st.session_state.ledger:
-            st.dataframe(st.session_state.ledger[::-1], use_container_width=True)
-        else:
-            st.info("Vault is empty. Run Act 1 or Act 2 to populate.")
+        st.dataframe(st.session_state.ledger[::-1], use_container_width=True)
 
-    # ACT 4
     with tab4:
         st.header("ACT 4: 24-HOUR ENDURANCE")
         if st.button("START ENDURANCE CYCLE"):
@@ -170,4 +159,12 @@ if mode == "CEO Gateway":
                 add_to_ledger(f"Endurance_{i}", res)
                 update_top_metrics()
                 logs_4.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] STABLE | {res['raw_total']:,} KVU | £{res['value']:.4f}")
-                window_4.markdown(f'<div
+                window_4.markdown(f'<div class="terminal-box">{"<br>".join(logs_4[:50])}</div>', unsafe_allow_html=True)
+                time.sleep(0.02)
+
+else:
+    st.title("HM TREASURY // REGULATORY OVERRIDE")
+    auth_key = st.text_input("ENTER TREASURY ACCESS KEY:", type="password")
+    if auth_key == TREASURY_KEY:
+        st.success("AUDIT VAULT UNLOCKED")
+        st.dataframe(st.session_state.ledger, use_container_width=True)
