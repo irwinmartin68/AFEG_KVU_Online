@@ -53,11 +53,12 @@ st.sidebar.title("AFEG KVU CONTROLS")
 portal_mode = st.sidebar.selectbox("ACCESS PORTAL", ["CEO Gateway", "Treasury Key Portal"])
 text_size = st.sidebar.slider("TEXT SIZE", 10, 30, 14)
 
-st.markdown(f"<style>.terminal-box {{background-color:#000; color:#00FF41; padding:20px; font-family:monospace; height:400px; overflow-y:scroll; font-size:{text_size}px;}}</style>", unsafe_allow_html=True)
+st.markdown(f"<style>.terminal-box {{background-color:#000; color:#00FF41; padding:20px; font-family:monospace; height:500px; overflow-y:scroll; font-size:{text_size}px;}}</style>", unsafe_allow_html=True)
 
 if portal_mode == "CEO Gateway":
     st.title("AFEG CEO COMMAND CENTER")
     
+    # MASTER COUNTERS (TOP)
     m_cols = st.columns(3)
     m_rev, m_tax, m_kvu = m_cols[0].empty(), m_cols[1].empty(), m_cols[2].empty()
 
@@ -91,47 +92,23 @@ if portal_mode == "CEO Gateway":
 
     with tabs[1]:
         st.header("ACT 2: NATIONAL SURGE (975B KVU)")
+        st.info("Initiating high-velocity validation surge across national data nodes.")
         
-        # DEFINITIVE FIX: Define slots OUTSIDE the button
-        row1 = st.columns(3)
-        row2 = st.columns(3)
-        
-        slot_inf = row1[0].empty()
-        slot_res = row1[1].empty()
-        slot_mem = row1[2].empty()
-        slot_val = row2[0].empty()
-        slot_vat = row2[1].empty()
-        slot_kvu = row2[2].empty()
-
-        # Set to ZERO before start
-        slot_inf.metric("INFERENCE", "0")
-        slot_res.metric("REASONING", "0")
-        slot_mem.metric("MEMORY", "0")
-        slot_val.metric("VALUE", "£0.00")
-        slot_vat.metric("VAT", "£0.00")
-        slot_kvu.metric("BATCH KVU", "0")
-
         if st.button("EXECUTE NATIONAL SURGE"):
             log_win = st.empty()
             logs = []
             batch_size = NATIONAL_DAILY_KVU / 100
             
             for i in range(100):
-                # Calculate
                 res = simulate_kvu(f"SURGE_NODE_{i}", scale_factor=(batch_size/650))
                 add_to_ledger(f"SURGE_NODE_{i}", res)
                 
-                # FORCE OVERWRITE
-                slot_inf.metric("INFERENCE", f"{res['inference']:,.0f}")
-                slot_res.metric("REASONING", f"{res['reasoning']:,.0f}")
-                slot_mem.metric("MEMORY", f"{res['memory']:,.0f}")
-                slot_val.metric("VALUE", f"£{res['value']:,.2f}")
-                slot_vat.metric("VAT", f"£{res['vat']:,.2f}")
-                slot_kvu.metric("BATCH KVU", f"{res['raw_total']:,.0f}")
-                
+                # Update Master Counters only
                 update_top_metrics()
-                logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] SYNC_OK | +{res['raw_total']:,.0f} KVU")
-                log_win.markdown(f'<div class="terminal-box">{"<br>".join(logs[:50])}</div>', unsafe_allow_html=True)
+                
+                timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+                logs.insert(0, f"[{timestamp}] SYNC_OK | BATCH_{i} | +{res['raw_total']:,.0f} KVU | £{res['value']:,.2f}")
+                log_win.markdown(f'<div class="terminal-box">{"<br>".join(logs[:100])}</div>', unsafe_allow_html=True)
                 time.sleep(0.05)
 
     with tabs[2]:
@@ -146,17 +123,19 @@ if portal_mode == "CEO Gateway":
         if st.button("START SUSTAINED LOAD TEST"):
             e_win = st.empty()
             e_logs = []
+            # Scaling to represent a full 24-hour cycle accumulation
             sustained_load = NATIONAL_DAILY_KVU / 150
             for i in range(150):
                 res = simulate_kvu(f"24H_NODE_{i}", scale_factor=(sustained_load/650))
                 add_to_ledger(f"24H_NODE_{i}", res)
                 update_top_metrics()
-                e_logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] STABLE | TOTAL VAT: £{(st.session_state.session_revenue * 0.2):,.2f}")
-                e_win.markdown(f'<div class="terminal-box">{"<br>".join(e_logs[:50])}</div>', unsafe_allow_html=True)
+                e_logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] STABLE | ACCRUING VAT: £{(st.session_state.session_revenue * 0.2):,.2f}")
+                e_win.markdown(f'<div class="terminal-box">{"<br>".join(e_logs[:100])}</div>', unsafe_allow_html=True)
                 time.sleep(0.05)
 else:
     st.title("HM TREASURY // REGULATORY OVERRIDE")
     key_in = st.text_input("ENTER TREASURY ACCESS KEY:", type="password")
     if key_in == TREASURY_KEY:
-        st.metric("VAT RECOVERY (20%)", f"£{(st.session_state.session_revenue * 0.2):,.2f}")
+        st.success("AUDIT VAULT UNLOCKED")
+        st.metric("AUDITED NATIONAL VAT RECOVERY", f"£{(st.session_state.session_revenue * 0.2):,.2f}")
         st.dataframe(st.session_state.ledger, use_container_width=True)
