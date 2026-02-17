@@ -3,7 +3,6 @@ import time, hashlib, json, random, io, zipfile
 from datetime import datetime, timedelta
 
 # ------------------ RESEARCH-BACKED CALIBRATION ------------------
-# 20M users @ 20% daily activity = 4M DAU. 4M DAU @ 5 QPD = 20M Daily Queries.
 DAU_UK = 4_000_000 
 QUERIES_PER_USER = 5
 NATIONAL_DAILY_QUERIES = DAU_UK * QUERIES_PER_USER # 20,000,000
@@ -19,6 +18,8 @@ if "ledger" not in st.session_state:
     st.session_state.ledger = []
 if "session_revenue" not in st.session_state:
     st.session_state.session_revenue = 0.0
+if "act1_subtotal" not in st.session_state:
+    st.session_state.act1_subtotal = 0.0
 if "current_result" not in st.session_state:
     st.session_state.current_result = None
 
@@ -35,12 +36,20 @@ def simulate_kvu(query:str, scale_factor=1.0):
     
     raw_total = inf + res + mem
     value = raw_total * KVU_VALUE
+    
     return {
-        "inference": round(inf, 2), "reasoning": round(res, 2), "memory": round(mem, 2),
-        "raw_total": round(raw_total, 2), "value": round(value, 4), "vat": round(value * VAT_RATE, 4)
+        "inference": round(inf, 2),
+        "reasoning": round(res, 2),
+        "memory": round(mem, 2),
+        "raw_total": round(raw_total, 2),
+        "value": round(value, 4),
+        "inf_val": round(inf * KVU_VALUE, 4),
+        "res_val": round(res * KVU_VALUE, 4),
+        "mem_val": round(mem * KVU_VALUE, 4),
+        "vat": round(value * VAT_RATE, 4)
     }
 
-def add_to_ledger(query, result):
+def add_to_ledger(query, result, is_act1=False):
     entry = result.copy()
     entry.update({
         "query": query, "timestamp": datetime.now().strftime("%H:%M:%S"),
@@ -48,6 +57,7 @@ def add_to_ledger(query, result):
     })
     st.session_state.ledger.append(entry)
     st.session_state.session_revenue += entry["value"]
+    if is_act1: st.session_state.act1_subtotal += entry["value"]
     st.session_state.current_result = entry
 
 # ------------------ UI SETUP ------------------
@@ -79,15 +89,35 @@ if portal_mode == "CEO Gateway":
         if st.button("SUBMIT QUERY"):
             if q_in:
                 res = simulate_kvu(q_in)
-                add_to_ledger(q_in, res)
+                add_to_ledger(q_in, res, is_act1=True)
                 st.rerun()
+
+        if st.session_state.current_result:
+            c = st.session_state.current_result
+            st.divider()
+            # Row 1: Raw Units
+            r1c1, r1c2, r1c3 = st.columns(3)
+            r1c1.metric("INFERENCE (KVU)", f"{c['inference']:,}")
+            r1c2.metric("REASONING (KVU)", f"{c['reasoning']:,}")
+            r1c3.metric("MEMORY (KVU)", f"{c['memory']:,}")
+            
+            # Row 2: Values & VAT
+            r2c1, r2c2, r2c3 = st.columns(3)
+            r2c1.metric("GROSS VALUE", f"£{c['value']:,.4f}")
+            r2c2.metric("VAT CAPTURE", f"£{c['vat']:,.4f}")
+            r2c3.metric("ACT SUBTOTAL", f"£{st.session_state.act1_subtotal:,.4f}")
+            
+            # Row 3: Value Breakdown
+            r3c1, r3c2, r3c3 = st.columns(3)
+            r3c1.metric("INF VALUE", f"£{c['inf_val']:,.4f}")
+            r3c2.metric("RES VALUE", f"£{c['res_val']:,.4f}")
+            r3c3.metric("MEM VALUE", f"£{c['mem_val']:,.4f}")
 
     with tabs[1]:
         st.header("ACT 2: NATIONAL SURGE")
         if st.button("EXECUTE NATIONAL SURGE"):
             log_win = st.empty()
             logs = []
-            # 10% of Daily traffic surge
             batch_size = (NATIONAL_DAILY_KVU * 0.1) / 100
             for i in range(100):
                 res = simulate_kvu(f"SURGE_NODE_{i}", scale_factor=(batch_size/650))
@@ -106,7 +136,7 @@ if portal_mode == "CEO Gateway":
 
     with tabs[3]:
         st.header("ACT 4: 24-HOUR NATIONAL ENDURANCE")
-        st.caption(f"Source: {DAU_UK/1e6}M DAU @ {QUERIES_PER_USER} Queries Per Day")
+        st.caption(f"Equation: {DAU_UK/1e6}M DAU @ {QUERIES_PER_USER} QPD (Total 20M Queries)")
         
         e_cols = st.columns(2)
         e_metric_rev = e_cols[0].empty()
@@ -135,7 +165,7 @@ if portal_mode == "CEO Gateway":
                 e_logs.insert(0, f"[{current_sim_time}] TEMPORAL_SYNC | INFRA_STABLE | BATCH: {res['raw_total']:,.0f} KVU | VAT: £{res['vat']:,.2f}")
                 e_win.markdown(f'<div class="terminal-box">{"<br>".join(e_logs[:100])}</div>', unsafe_allow_html=True)
                 
-                time.sleep(2.5) # ~60 second runtime
+                time.sleep(2.5) 
 
 else:
     st.title("HM TREASURY // READ-ONLY AUDIT EXPORT")
