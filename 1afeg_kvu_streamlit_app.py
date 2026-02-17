@@ -2,7 +2,7 @@ import streamlit as st
 import time, hashlib, json, random, io, zipfile
 from datetime import datetime, timedelta
 
-# ------------------ CONFIG ------------------
+# ------------------ NATIONAL SCALE CONFIG ------------------
 KVU_VALUE = 0.001
 VAT_RATE = 0.20
 NATIONAL_DAILY_KVU = 975_000_000_000 
@@ -47,7 +47,7 @@ def add_to_ledger(query, result, is_act1=False):
     st.session_state.current_result = entry
 
 # ------------------ UI SETUP ------------------
-st.set_page_config(page_title="AFEG National Auditor", layout="wide")
+st.set_page_config(page_title="AFEG KVU Auditor", layout="wide")
 st.sidebar.title("AFEG KVU CONTROLS")
 portal_mode = st.sidebar.selectbox("ACCESS PORTAL", ["CEO Gateway", "Treasury Export Portal"])
 text_size = st.sidebar.slider("TEXT SIZE", 10, 30, 14)
@@ -55,7 +55,7 @@ text_size = st.sidebar.slider("TEXT SIZE", 10, 30, 14)
 st.markdown(f"<style>.terminal-box {{background-color:#000; color:#00FF41; padding:20px; font-family:monospace; height:500px; overflow-y:scroll; font-size:{text_size}px;}}</style>", unsafe_allow_html=True)
 
 if portal_mode == "CEO Gateway":
-    st.title("AFEG CEO COMMAND CENTER")
+    st.title("AFEG KVU") # Corrected Header
     
     m_cols = st.columns(3)
     m_rev, m_tax, m_kvu = m_cols[0].empty(), m_cols[1].empty(), m_cols[2].empty()
@@ -107,13 +107,11 @@ if portal_mode == "CEO Gateway":
 
     with tabs[3]:
         st.header("ACT 4: 24-HOUR NATIONAL ENDURANCE")
-        st.write("Stress-testing national infrastructure across a full 24-hour temporal cycle.")
         
-        # ACT 4 INDEPENDENT COUNTERS
+        # ACT 4 INDEPENDENT COUNTERS (START AT ZERO)
         e_cols = st.columns(2)
         e_metric_rev = e_cols[0].empty()
         e_metric_vat = e_cols[1].empty()
-        
         e_metric_rev.metric("ACT 4 GROSS (LOCAL)", "£0.00")
         e_metric_vat.metric("ACT 4 VAT (LOCAL)", "£0.00")
 
@@ -122,25 +120,36 @@ if portal_mode == "CEO Gateway":
             e_logs = []
             act4_revenue = 0.0
             
-            # 144 steps = 1 step every 10 minutes of simulated time
-            # 60 seconds total / 144 steps = approx 0.4s per step
+            # 144 steps = full day in 10-min increments
             start_sim_time = datetime.strptime("00:00", "%H:%M")
             sustained_load = NATIONAL_DAILY_KVU / 144
             
             for i in range(144):
-                # Update Simulated Clock
                 current_sim_time = (start_sim_time + timedelta(minutes=i*10)).strftime("%H:%M")
+                res = simulate_kvu(f"ENDURANCE_NODE_{i}", scale_factor=(sustained_load/650))
                 
-                # Process Data
-                res = simulate_kvu(f"TS_NODE_{i}", scale_factor=(sustained_load/650))
-                
-                # Add to Act 4 Local Totals
+                # Internal Logic
                 act4_revenue += res['value']
-                
-                # Add to Master Ledger
                 add_to_ledger(f"STRESS_TEST_{current_sim_time}", res)
                 update_top_metrics()
                 
-                # Update Local UI
+                # UI Update
                 e_metric_rev.metric("ACT 4 GROSS (LOCAL)", f"£{act4_revenue:,.2f}")
                 e_metric_vat.metric("ACT 4 VAT (LOCAL)", f"£{(act4_revenue * 0.2):,.2f}")
+                
+                # Live Ledger Window with Clock
+                e_logs.insert(0, f"[{current_sim_time}] TEMPORAL_SYNC | STABLE | BATCH: {res['raw_total']:,.0f} KVU | LOCAL_VAT: £{(act4_revenue * 0.2):,.2f}")
+                e_win.markdown(f'<div class="terminal-box">{"<br>".join(e_logs[:100])}</div>', unsafe_allow_html=True)
+                
+                time.sleep(0.42) # Approx 1 minute total runtime
+
+else:
+    st.title("HM TREASURY // READ-ONLY AUDIT EXPORT")
+    if st.session_state.ledger:
+        st.metric("AUDITED NATIONAL VAT RECOVERY", f"£{(st.session_state.session_revenue * 0.2):,.2f}")
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "x") as csv_zip:
+            audit_data = json.dumps(st.session_state.ledger, indent=4)
+            csv_zip.writestr("AFEG_IMMUTABLE_LEDGER.json", audit_data)
+        st.download_button(label="DOWNLOAD TREASURY AUDIT BUNDLE (.ZIP)", data=buf.getvalue(), file_name="TREASURY_AUDIT.zip", mime="application/zip")
+        st.dataframe(st.session_state.ledger, use_container_width=True)
