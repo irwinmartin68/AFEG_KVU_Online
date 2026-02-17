@@ -2,10 +2,12 @@ import streamlit as st
 import time, hashlib, json, random, io, zipfile
 from datetime import datetime, timedelta
 
-# ------------------ NATIONAL SCALE CONFIG ------------------
+# ------------------ NATIONAL CALIBRATION ------------------
 KVU_VALUE = 0.001
 VAT_RATE = 0.20
+# Based on 1.5 Billion Queries per Day
 NATIONAL_DAILY_KVU = 975_000_000_000 
+HOURLY_STEPS = 24  # 24 steps for the hourly temporal sync
 
 # ------------------ SESSION STATE ------------------
 if "ledger" not in st.session_state:
@@ -21,6 +23,7 @@ if "current_result" not in st.session_state:
 def simulate_kvu(query:str, scale_factor=1.0):
     base = (400 + (len(query) * 10)) * scale_factor
     q_low = query.lower()
+    
     if any(w in q_low for w in ["why", "how", "explain"]):
         inf, res, mem = base * 0.8, base * 1.2, base * 0.1
     elif any(w in q_low for w in ["what", "who", "where", "when"]):
@@ -55,7 +58,7 @@ text_size = st.sidebar.slider("TEXT SIZE", 10, 30, 14)
 st.markdown(f"<style>.terminal-box {{background-color:#000; color:#00FF41; padding:20px; font-family:monospace; height:500px; overflow-y:scroll; font-size:{text_size}px;}}</style>", unsafe_allow_html=True)
 
 if portal_mode == "CEO Gateway":
-    st.title("AFEG KVU") # Corrected Header
+    st.title("AFEG KVU") 
     
     m_cols = st.columns(3)
     m_rev, m_tax, m_kvu = m_cols[0].empty(), m_cols[1].empty(), m_cols[2].empty()
@@ -89,7 +92,7 @@ if portal_mode == "CEO Gateway":
         if st.button("EXECUTE NATIONAL SURGE"):
             log_win = st.empty()
             logs = []
-            batch_size = NATIONAL_DAILY_KVU / 100
+            batch_size = (NATIONAL_DAILY_KVU * 0.1) / 100
             for i in range(100):
                 res = simulate_kvu(f"SURGE_NODE_{i}", scale_factor=(batch_size/650))
                 add_to_ledger(f"SURGE_NODE_{i}", res)
@@ -107,8 +110,6 @@ if portal_mode == "CEO Gateway":
 
     with tabs[3]:
         st.header("ACT 4: 24-HOUR NATIONAL ENDURANCE")
-        
-        # ACT 4 INDEPENDENT COUNTERS (START AT ZERO)
         e_cols = st.columns(2)
         e_metric_rev = e_cols[0].empty()
         e_metric_vat = e_cols[1].empty()
@@ -119,29 +120,24 @@ if portal_mode == "CEO Gateway":
             e_win = st.empty()
             e_logs = []
             act4_revenue = 0.0
-            
-            # 144 steps = full day in 10-min increments
             start_sim_time = datetime.strptime("00:00", "%H:%M")
-            sustained_load = NATIONAL_DAILY_KVU / 144
+            hourly_load = NATIONAL_DAILY_KVU / HOURLY_STEPS
             
-            for i in range(144):
-                current_sim_time = (start_sim_time + timedelta(minutes=i*10)).strftime("%H:%M")
-                res = simulate_kvu(f"ENDURANCE_NODE_{i}", scale_factor=(sustained_load/650))
+            for i in range(HOURLY_STEPS):
+                current_sim_time = (start_sim_time + timedelta(hours=i)).strftime("%H:00")
+                res = simulate_kvu(f"UK_NODE_{current_sim_time}", scale_factor=(hourly_load/650))
                 
-                # Internal Logic
                 act4_revenue += res['value']
                 add_to_ledger(f"STRESS_TEST_{current_sim_time}", res)
                 update_top_metrics()
                 
-                # UI Update
                 e_metric_rev.metric("ACT 4 GROSS (LOCAL)", f"£{act4_revenue:,.2f}")
                 e_metric_vat.metric("ACT 4 VAT (LOCAL)", f"£{(act4_revenue * 0.2):,.2f}")
                 
-                # Live Ledger Window with Clock
-                e_logs.insert(0, f"[{current_sim_time}] TEMPORAL_SYNC | STABLE | BATCH: {res['raw_total']:,.0f} KVU | LOCAL_VAT: £{(act4_revenue * 0.2):,.2f}")
+                e_logs.insert(0, f"[{current_sim_time}] TEMPORAL_SYNC | STABLE | BATCH: {res['raw_total']:,.0f} KVU | VAT: £{res['vat']:,.2f}")
                 e_win.markdown(f'<div class="terminal-box">{"<br>".join(e_logs[:100])}</div>', unsafe_allow_html=True)
                 
-                time.sleep(0.42) # Approx 1 minute total runtime
+                time.sleep(2.5) # Calibrated for ~60 second runtime
 
 else:
     st.title("HM TREASURY // READ-ONLY AUDIT EXPORT")
