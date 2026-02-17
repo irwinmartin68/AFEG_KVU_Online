@@ -1,12 +1,11 @@
 import streamlit as st
-import time, hashlib, json, random
+import time, hashlib, json, random, io, zipfile
 from datetime import datetime
 
 # ------------------ CONFIG ------------------
 KVU_VALUE = 0.001
 VAT_RATE = 0.20
 NATIONAL_DAILY_KVU = 975_000_000_000 
-TREASURY_KEY = "AFEG-V7-TREASURY-2026"
 
 # ------------------ SESSION STATE ------------------
 if "ledger" not in st.session_state:
@@ -50,7 +49,7 @@ def add_to_ledger(query, result, is_act1=False):
 # ------------------ UI SETUP ------------------
 st.set_page_config(page_title="AFEG National Auditor", layout="wide")
 st.sidebar.title("AFEG KVU CONTROLS")
-portal_mode = st.sidebar.selectbox("ACCESS PORTAL", ["CEO Gateway", "Treasury Key Portal"])
+portal_mode = st.sidebar.selectbox("ACCESS PORTAL", ["CEO Gateway", "Treasury Export Portal"])
 text_size = st.sidebar.slider("TEXT SIZE", 10, 30, 14)
 
 st.markdown(f"<style>.terminal-box {{background-color:#000; color:#00FF41; padding:20px; font-family:monospace; height:500px; overflow-y:scroll; font-size:{text_size}px;}}</style>", unsafe_allow_html=True)
@@ -58,7 +57,6 @@ st.markdown(f"<style>.terminal-box {{background-color:#000; color:#00FF41; paddi
 if portal_mode == "CEO Gateway":
     st.title("AFEG CEO COMMAND CENTER")
     
-    # MASTER COUNTERS (TOP)
     m_cols = st.columns(3)
     m_rev, m_tax, m_kvu = m_cols[0].empty(), m_cols[1].empty(), m_cols[2].empty()
 
@@ -92,22 +90,15 @@ if portal_mode == "CEO Gateway":
 
     with tabs[1]:
         st.header("ACT 2: NATIONAL SURGE (975B KVU)")
-        st.info("Initiating high-velocity validation surge across national data nodes.")
-        
         if st.button("EXECUTE NATIONAL SURGE"):
             log_win = st.empty()
             logs = []
             batch_size = NATIONAL_DAILY_KVU / 100
-            
             for i in range(100):
                 res = simulate_kvu(f"SURGE_NODE_{i}", scale_factor=(batch_size/650))
                 add_to_ledger(f"SURGE_NODE_{i}", res)
-                
-                # Update Master Counters only
                 update_top_metrics()
-                
-                timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
-                logs.insert(0, f"[{timestamp}] SYNC_OK | BATCH_{i} | +{res['raw_total']:,.0f} KVU | £{res['value']:,.2f}")
+                logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] SYNC_OK | +{res['raw_total']:,.0f} KVU")
                 log_win.markdown(f'<div class="terminal-box">{"<br>".join(logs[:100])}</div>', unsafe_allow_html=True)
                 time.sleep(0.05)
 
@@ -123,19 +114,38 @@ if portal_mode == "CEO Gateway":
         if st.button("START SUSTAINED LOAD TEST"):
             e_win = st.empty()
             e_logs = []
-            # Scaling to represent a full 24-hour cycle accumulation
             sustained_load = NATIONAL_DAILY_KVU / 150
             for i in range(150):
                 res = simulate_kvu(f"24H_NODE_{i}", scale_factor=(sustained_load/650))
                 add_to_ledger(f"24H_NODE_{i}", res)
                 update_top_metrics()
-                e_logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] STABLE | ACCRUING VAT: £{(st.session_state.session_revenue * 0.2):,.2f}")
+                e_logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] STABLE | VAT: £{(st.session_state.session_revenue * 0.2):,.2f}")
                 e_win.markdown(f'<div class="terminal-box">{"<br>".join(e_logs[:100])}</div>', unsafe_allow_html=True)
                 time.sleep(0.05)
 else:
-    st.title("HM TREASURY // REGULATORY OVERRIDE")
-    key_in = st.text_input("ENTER TREASURY ACCESS KEY:", type="password")
-    if key_in == TREASURY_KEY:
-        st.success("AUDIT VAULT UNLOCKED")
+    st.title("HM TREASURY // READ-ONLY AUDIT EXPORT")
+    st.info("This portal provides the final immutable evidence package for the Treasury.")
+    
+    if st.session_state.ledger:
         st.metric("AUDITED NATIONAL VAT RECOVERY", f"£{(st.session_state.session_revenue * 0.2):,.2f}")
+        
+        # Build ZIP File in Memory
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "x") as csv_zip:
+            # Create the data file
+            audit_data = json.dumps(st.session_state.ledger, indent=4)
+            csv_zip.writestr("AFEG_IMMUTABLE_LEDGER.json", audit_data)
+            # Create a summary report
+            summary = f"AFEG V7 AUDIT SUMMARY\nDATE: {datetime.now()}\nGROSS VALUE: £{st.session_state.session_revenue}\nVAT RECOVERY: £{st.session_state.session_revenue * 0.2}"
+            csv_zip.writestr("AUDIT_SUMMARY.txt", summary)
+        
+        st.download_button(
+            label="DOWNLOAD TREASURY AUDIT BUNDLE (.ZIP)",
+            data=buf.getvalue(),
+            file_name=f"TREASURY_AUDIT_{datetime.now().strftime('%Y%m%d')}.zip",
+            mime="application/zip",
+            use_container_width=True
+        )
         st.dataframe(st.session_state.ledger, use_container_width=True)
+    else:
+        st.warning("No data found. Please run a simulation in the CEO Gateway first.")
