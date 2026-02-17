@@ -2,20 +2,23 @@ import streamlit as st
 import time, hashlib, json, random, io, zipfile
 from datetime import datetime, timedelta
 
-# ------------------ NATIONAL CALIBRATION ------------------
+# ------------------ RESEARCH-BACKED CALIBRATION ------------------
+# 20M users @ 20% daily activity = 4M DAU. 4M DAU @ 5 QPD = 20M Daily Queries.
+DAU_UK = 4_000_000 
+QUERIES_PER_USER = 5
+NATIONAL_DAILY_QUERIES = DAU_UK * QUERIES_PER_USER # 20,000,000
+AVG_KVU_PER_QUERY = 650
+NATIONAL_DAILY_KVU = NATIONAL_DAILY_QUERIES * AVG_KVU_PER_QUERY # 13 Billion Units
+
 KVU_VALUE = 0.001
 VAT_RATE = 0.20
-# Based on 1.5 Billion Queries per Day
-NATIONAL_DAILY_KVU = 975_000_000_000 
-HOURLY_STEPS = 24  # 24 steps for the hourly temporal sync
+HOURLY_STEPS = 24 
 
 # ------------------ SESSION STATE ------------------
 if "ledger" not in st.session_state:
     st.session_state.ledger = []
 if "session_revenue" not in st.session_state:
     st.session_state.session_revenue = 0.0
-if "act1_subtotal" not in st.session_state:
-    st.session_state.act1_subtotal = 0.0
 if "current_result" not in st.session_state:
     st.session_state.current_result = None
 
@@ -23,7 +26,6 @@ if "current_result" not in st.session_state:
 def simulate_kvu(query:str, scale_factor=1.0):
     base = (400 + (len(query) * 10)) * scale_factor
     q_low = query.lower()
-    
     if any(w in q_low for w in ["why", "how", "explain"]):
         inf, res, mem = base * 0.8, base * 1.2, base * 0.1
     elif any(w in q_low for w in ["what", "who", "where", "when"]):
@@ -38,7 +40,7 @@ def simulate_kvu(query:str, scale_factor=1.0):
         "raw_total": round(raw_total, 2), "value": round(value, 4), "vat": round(value * VAT_RATE, 4)
     }
 
-def add_to_ledger(query, result, is_act1=False):
+def add_to_ledger(query, result):
     entry = result.copy()
     entry.update({
         "query": query, "timestamp": datetime.now().strftime("%H:%M:%S"),
@@ -46,7 +48,6 @@ def add_to_ledger(query, result, is_act1=False):
     })
     st.session_state.ledger.append(entry)
     st.session_state.session_revenue += entry["value"]
-    if is_act1: st.session_state.act1_subtotal += entry["value"]
     st.session_state.current_result = entry
 
 # ------------------ UI SETUP ------------------
@@ -78,20 +79,15 @@ if portal_mode == "CEO Gateway":
         if st.button("SUBMIT QUERY"):
             if q_in:
                 res = simulate_kvu(q_in)
-                add_to_ledger(q_in, res, is_act1=True)
+                add_to_ledger(q_in, res)
                 st.rerun()
-        if st.session_state.current_result:
-            c = st.session_state.current_result
-            r_cols = st.columns(3)
-            r_cols[0].metric("INFERENCE", f"{c['inference']:,}")
-            r_cols[1].metric("REASONING", f"{c['reasoning']:,}")
-            r_cols[2].metric("MEMORY", f"{c['memory']:,}")
 
     with tabs[1]:
         st.header("ACT 2: NATIONAL SURGE")
         if st.button("EXECUTE NATIONAL SURGE"):
             log_win = st.empty()
             logs = []
+            # 10% of Daily traffic surge
             batch_size = (NATIONAL_DAILY_KVU * 0.1) / 100
             for i in range(100):
                 res = simulate_kvu(f"SURGE_NODE_{i}", scale_factor=(batch_size/650))
@@ -110,6 +106,8 @@ if portal_mode == "CEO Gateway":
 
     with tabs[3]:
         st.header("ACT 4: 24-HOUR NATIONAL ENDURANCE")
+        st.caption(f"Source: {DAU_UK/1e6}M DAU @ {QUERIES_PER_USER} Queries Per Day")
+        
         e_cols = st.columns(2)
         e_metric_rev = e_cols[0].empty()
         e_metric_vat = e_cols[1].empty()
@@ -134,18 +132,16 @@ if portal_mode == "CEO Gateway":
                 e_metric_rev.metric("ACT 4 GROSS (LOCAL)", f"£{act4_revenue:,.2f}")
                 e_metric_vat.metric("ACT 4 VAT (LOCAL)", f"£{(act4_revenue * 0.2):,.2f}")
                 
-                e_logs.insert(0, f"[{current_sim_time}] TEMPORAL_SYNC | STABLE | BATCH: {res['raw_total']:,.0f} KVU | VAT: £{res['vat']:,.2f}")
+                e_logs.insert(0, f"[{current_sim_time}] TEMPORAL_SYNC | INFRA_STABLE | BATCH: {res['raw_total']:,.0f} KVU | VAT: £{res['vat']:,.2f}")
                 e_win.markdown(f'<div class="terminal-box">{"<br>".join(e_logs[:100])}</div>', unsafe_allow_html=True)
                 
-                time.sleep(2.5) # Calibrated for ~60 second runtime
+                time.sleep(2.5) # ~60 second runtime
 
 else:
     st.title("HM TREASURY // READ-ONLY AUDIT EXPORT")
-    if st.session_state.ledger:
-        st.metric("AUDITED NATIONAL VAT RECOVERY", f"£{(st.session_state.session_revenue * 0.2):,.2f}")
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "x") as csv_zip:
-            audit_data = json.dumps(st.session_state.ledger, indent=4)
-            csv_zip.writestr("AFEG_IMMUTABLE_LEDGER.json", audit_data)
-        st.download_button(label="DOWNLOAD TREASURY AUDIT BUNDLE (.ZIP)", data=buf.getvalue(), file_name="TREASURY_AUDIT.zip", mime="application/zip")
-        st.dataframe(st.session_state.ledger, use_container_width=True)
+    st.metric("AUDITED NATIONAL VAT RECOVERY", f"£{(st.session_state.session_revenue * 0.2):,.2f}")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "x") as csv_zip:
+        audit_data = json.dumps(st.session_state.ledger, indent=4)
+        csv_zip.writestr("AFEG_IMMUTABLE_LEDGER.json", audit_data)
+    st.download_button(label="DOWNLOAD TREASURY AUDIT BUNDLE (.ZIP)", data=buf.getvalue(), file_name="TREASURY_AUDIT.zip", mime="application/zip")
