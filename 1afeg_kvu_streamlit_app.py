@@ -1,6 +1,6 @@
 import streamlit as st
 import time, hashlib, json, random, io, zipfile
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # ------------------ CONFIG ------------------
 KVU_VALUE = 0.001
@@ -83,13 +83,9 @@ if portal_mode == "CEO Gateway":
             r_cols[0].metric("INFERENCE", f"{c['inference']:,}")
             r_cols[1].metric("REASONING", f"{c['reasoning']:,}")
             r_cols[2].metric("MEMORY", f"{c['memory']:,}")
-            v_cols = st.columns(3)
-            v_cols[0].metric("VALUE", f"£{c['value']:,.4f}")
-            v_cols[1].metric("VAT", f"£{c['vat']:,.4f}")
-            v_cols[2].metric("ACT SUBTOTAL", f"£{st.session_state.act1_subtotal:,.4f}")
 
     with tabs[1]:
-        st.header("ACT 2: NATIONAL SURGE (975B KVU)")
+        st.header("ACT 2: NATIONAL SURGE")
         if st.button("EXECUTE NATIONAL SURGE"):
             log_win = st.empty()
             logs = []
@@ -111,41 +107,40 @@ if portal_mode == "CEO Gateway":
 
     with tabs[3]:
         st.header("ACT 4: 24-HOUR NATIONAL ENDURANCE")
-        if st.button("START SUSTAINED LOAD TEST"):
+        st.write("Stress-testing national infrastructure across a full 24-hour temporal cycle.")
+        
+        # ACT 4 INDEPENDENT COUNTERS
+        e_cols = st.columns(2)
+        e_metric_rev = e_cols[0].empty()
+        e_metric_vat = e_cols[1].empty()
+        
+        e_metric_rev.metric("ACT 4 GROSS (LOCAL)", "£0.00")
+        e_metric_vat.metric("ACT 4 VAT (LOCAL)", "£0.00")
+
+        if st.button("START 24H TEMPORAL STRESS TEST"):
             e_win = st.empty()
             e_logs = []
-            sustained_load = NATIONAL_DAILY_KVU / 150
-            for i in range(150):
-                res = simulate_kvu(f"24H_NODE_{i}", scale_factor=(sustained_load/650))
-                add_to_ledger(f"24H_NODE_{i}", res)
+            act4_revenue = 0.0
+            
+            # 144 steps = 1 step every 10 minutes of simulated time
+            # 60 seconds total / 144 steps = approx 0.4s per step
+            start_sim_time = datetime.strptime("00:00", "%H:%M")
+            sustained_load = NATIONAL_DAILY_KVU / 144
+            
+            for i in range(144):
+                # Update Simulated Clock
+                current_sim_time = (start_sim_time + timedelta(minutes=i*10)).strftime("%H:%M")
+                
+                # Process Data
+                res = simulate_kvu(f"TS_NODE_{i}", scale_factor=(sustained_load/650))
+                
+                # Add to Act 4 Local Totals
+                act4_revenue += res['value']
+                
+                # Add to Master Ledger
+                add_to_ledger(f"STRESS_TEST_{current_sim_time}", res)
                 update_top_metrics()
-                e_logs.insert(0, f"[{datetime.now().strftime('%H:%M:%S')}] STABLE | VAT: £{(st.session_state.session_revenue * 0.2):,.2f}")
-                e_win.markdown(f'<div class="terminal-box">{"<br>".join(e_logs[:100])}</div>', unsafe_allow_html=True)
-                time.sleep(0.05)
-else:
-    st.title("HM TREASURY // READ-ONLY AUDIT EXPORT")
-    st.info("This portal provides the final immutable evidence package for the Treasury.")
-    
-    if st.session_state.ledger:
-        st.metric("AUDITED NATIONAL VAT RECOVERY", f"£{(st.session_state.session_revenue * 0.2):,.2f}")
-        
-        # Build ZIP File in Memory
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "x") as csv_zip:
-            # Create the data file
-            audit_data = json.dumps(st.session_state.ledger, indent=4)
-            csv_zip.writestr("AFEG_IMMUTABLE_LEDGER.json", audit_data)
-            # Create a summary report
-            summary = f"AFEG V7 AUDIT SUMMARY\nDATE: {datetime.now()}\nGROSS VALUE: £{st.session_state.session_revenue}\nVAT RECOVERY: £{st.session_state.session_revenue * 0.2}"
-            csv_zip.writestr("AUDIT_SUMMARY.txt", summary)
-        
-        st.download_button(
-            label="DOWNLOAD TREASURY AUDIT BUNDLE (.ZIP)",
-            data=buf.getvalue(),
-            file_name=f"TREASURY_AUDIT_{datetime.now().strftime('%Y%m%d')}.zip",
-            mime="application/zip",
-            use_container_width=True
-        )
-        st.dataframe(st.session_state.ledger, use_container_width=True)
-    else:
-        st.warning("No data found. Please run a simulation in the CEO Gateway first.")
+                
+                # Update Local UI
+                e_metric_rev.metric("ACT 4 GROSS (LOCAL)", f"£{act4_revenue:,.2f}")
+                e_metric_vat.metric("ACT 4 VAT (LOCAL)", f"£{(act4_revenue * 0.2):,.2f}")
