@@ -120,7 +120,7 @@ if portal == "CEO Gateway":
             total_e_rev, total_e_kvu = 0.0, 0
             for i in range(24):
                 time_label = f"{i:02d}:00"
-                # Randomized Hourly Amounts for proof of variable scaling
+                # Randomized Hourly Amounts
                 hourly_kvu = (NATIONAL_DAILY_KVU / 24) * random.uniform(0.7, 1.3)
                 commit_to_ledger(f"STRESS_{time_label}", "COMPLIANT", "Batch", "Audited", hourly_kvu)
                 
