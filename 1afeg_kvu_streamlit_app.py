@@ -1,5 +1,5 @@
 import streamlit as st
-import time, hashlib, json, random, io, zipfile, psutil
+import time, hashlib, json, random, io, zipfile
 from datetime import datetime
 
 # ------------------ CONFIG & RESEARCH ------------------
@@ -17,10 +17,6 @@ def pass2_output_scan(response):
     if any(x in response.lower() for x in ["unsafe", "leak", "pii", "private"]):
         return False, "Output Risk (Filter)"
     return True, "Safe"
-
-def get_hardware_throttle():
-    cpu_usage = psutil.cpu_percent(interval=0.1)
-    return 0.1 + (cpu_usage / 100)
 
 # ------------------ STATE ------------------
 if "ledger_compliant" not in st.session_state: st.session_state.ledger_compliant = []
@@ -79,7 +75,6 @@ if portal == "CEO Gateway":
 
     with tabs[1]:
         st.header("ACT 2: NATIONAL SURGE (30s LIVE)")
-        # Live counters for Act 2
         s1, s2, s3 = st.columns(3)
         surge_rev = s1.empty(); surge_vat = s2.empty(); surge_kvu = s3.empty()
         
@@ -94,8 +89,6 @@ if portal == "CEO Gateway":
                 color = "#FF4B4B" if status == "INTERCEPT" else "#00FF41"
                 
                 commit_to_ledger(q, status, "Surge Check", "Verified", batch_kvu)
-                
-                # Update Act 2 Live Counters
                 running_rev += (batch_kvu * KVU_VALUE)
                 running_kvu += batch_kvu
                 surge_rev.metric("SURGE REVENUE", f"£{running_rev:,.2f}")
@@ -118,19 +111,28 @@ if portal == "CEO Gateway":
             st.dataframe(full_ledger, use_container_width=True)
 
     with tabs[3]:
-        st.header("ACT 4: 24H ENDURANCE (HARDWARE-SYNC)")
-        if st.button("START FORENSIC SCALING"):
+        st.header("ACT 4: 24H ENDURANCE (2m FORENSIC SIMULATION)")
+        e1, e2, e3 = st.columns(3)
+        e_rev = e1.empty(); e_vat = e2.empty(); e_kvu = e3.empty()
+        
+        if st.button("START 24H AUDIT"):
             e_win, e_logs = st.empty(), []
+            total_e_rev, total_e_kvu = 0.0, 0
             for i in range(24):
-                throttle = get_hardware_throttle()
                 time_label = f"{i:02d}:00"
-                # Randomized Amounts for realism
+                # Randomized Hourly Amounts for proof of variable scaling
                 hourly_kvu = (NATIONAL_DAILY_KVU / 24) * random.uniform(0.7, 1.3)
                 commit_to_ledger(f"STRESS_{time_label}", "COMPLIANT", "Batch", "Audited", hourly_kvu)
                 
-                e_logs.insert(0, f"<span style='color:#00FF41'>[{time_label}] SYNC: {100-psutil.cpu_percent()}% Idle | KVU: {hourly_kvu:,.0f}</span>")
+                total_e_rev += (hourly_kvu * KVU_VALUE)
+                total_e_kvu += hourly_kvu
+                e_rev.metric("AUDIT REVENUE", f"£{total_e_rev:,.2f}")
+                e_vat.metric("AUDIT VAT", f"£{(total_e_rev * VAT_RATE):,.2f}")
+                e_kvu.metric("AUDIT KVUs", f"{total_e_kvu:,.0f}")
+                
+                e_logs.insert(0, f"<span style='color:#00FF41'>[{time_label}] FORENSIC_SYNC | {hourly_kvu:,.0f} KVU | VAT Recovery: £{(hourly_kvu * KVU_VALUE * VAT_RATE):,.2f}</span>")
                 e_win.markdown(f'<div class="terminal">{"<br>".join(e_logs)}</div>', unsafe_allow_html=True)
-                time.sleep(throttle)
+                time.sleep(5.0) # 24 steps * 5s = 120 seconds (2 minutes)
             st.rerun()
 
 else:
