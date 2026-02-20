@@ -122,13 +122,12 @@ if portal == "CEO Gateway":
             e_win, e_logs = st.empty(), []
             for i in range(24):
                 time_label = f"{i:02d}:00"
-                # Randomized national load curve for realistic simulation
                 hourly_kvu = (NATIONAL_DAILY_KVU / 24) * random.uniform(0.6, 1.4)
                 commit_to_ledger(f"STRESS_{time_label}", "COMPLIANT", "Batch Load", "Audited", hourly_kvu)
                 
                 e_logs.insert(0, f"<span style='color:#00FF41'>[{time_label}] SIMULATION_SYNC | KVU: {hourly_kvu:,.0f} | Recovery: £{(hourly_kvu*KVU_VALUE*VAT_RATE):,.2f}</span>")
                 e_win.markdown(f'<div class="terminal">{"<br>".join(e_logs)}</div>', unsafe_allow_html=True)
-                time.sleep(0.5) # Fast simulation scroll
+                time.sleep(0.5) 
             st.rerun()
 
 else:
