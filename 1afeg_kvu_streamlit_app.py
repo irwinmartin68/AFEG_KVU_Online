@@ -1,5 +1,5 @@
 import streamlit as st
-import time, hashlib, json, random, io, zipfile
+import time, hashlib, json, random, io, zipfile, psutil
 from datetime import datetime
 
 # ------------------ CONFIG & RESEARCH ------------------
@@ -18,14 +18,9 @@ def pass2_output_scan(response):
         return False, "Output Risk (Filter)"
     return True, "Safe"
 
-def calculate_kvu_split(base_kvu, query):
-    """Calculates the 3-way split of work."""
-    q_low = query.lower()
-    if any(w in q_low for w in ["why", "how", "explain"]):
-        inf, res, mem = base_kvu * 0.4, base_kvu * 0.5, base_kvu * 0.1
-    else:
-        inf, res, mem = base_kvu * 0.7, base_kvu * 0.1, base_kvu * 0.2
-    return round(inf, 2), round(res, 2), round(mem, 2)
+def get_hardware_throttle():
+    cpu_usage = psutil.cpu_percent(interval=0.1)
+    return 0.1 + (cpu_usage / 100)
 
 # ------------------ STATE ------------------
 if "ledger_compliant" not in st.session_state: st.session_state.ledger_compliant = []
@@ -33,10 +28,9 @@ if "ledger_intercept" not in st.session_state: st.session_state.ledger_intercept
 if "session_rev" not in st.session_state: st.session_state.session_rev = 0.0
 if "current" not in st.session_state: st.session_state.current = None
 
-def commit_to_ledger(query, status, reason, action, kvu_amt, split):
+def commit_to_ledger(query, status, reason, action, kvu_amt):
     entry = {"query": query, "timestamp": datetime.now().strftime("%H:%M:%S"),
-             "kvu": kvu_amt, "inference": split[0], "reasoning": split[1], "memory": split[2],
-             "value": kvu_amt * KVU_VALUE, "vat": (kvu_amt * KVU_VALUE) * VAT_RATE,
+             "kvu": kvu_amt, "value": kvu_amt * KVU_VALUE, "vat": (kvu_amt * KVU_VALUE) * VAT_RATE,
              "status": status, "reason": reason, "action": action,
              "hash": hashlib.sha256(str(random.random()).encode()).hexdigest()}
     
@@ -59,7 +53,7 @@ st.markdown("""<style>.terminal {background-color:#000; padding:15px; font-famil
 if portal == "CEO Gateway":
     st.title("AFEG KVU – Governance, Regulatory Audit & Export")
     
-    # Global Summary
+    # MASTER TOP-LEVEL METRICS
     c1, c2, c3 = st.columns(3)
     total_kvu = sum(e['kvu'] for e in st.session_state.ledger_compliant + st.session_state.ledger_intercept)
     c1.metric("GROSS REVENUE", f"£{st.session_state.session_rev:,.2f}")
@@ -74,59 +68,64 @@ if portal == "CEO Gateway":
         if st.button("SUBMIT QUERY") and q_in:
             safe_in, r1 = pass1_input_scan(q_in)
             if not safe_in:
-                commit_to_ledger(q_in, "INTERCEPT", r1, "Blocked", 0, (0,0,0))
+                commit_to_ledger(q_in, "INTERCEPT", r1, "Blocked", 0)
             else:
                 kvu = 650 + (len(q_in) * 5)
-                split = calculate_kvu_split(kvu, q_in)
                 safe_out, r2 = pass2_output_scan("Simulated Response")
                 status = "COMPLIANT" if safe_out else "INTERCEPT"
                 action = "Delivered" if safe_out else ("Flagged" if gov_mode=="Demo" else "Blocked")
-                commit_to_ledger(q_in, status, r2, action, kvu, split)
+                commit_to_ledger(q_in, status, r2, action, kvu)
             st.rerun()
-        
-        if st.session_state.current:
-            cur = st.session_state.current
-            sc1, sc2, sc3 = st.columns(3)
-            sc1.metric("INFERENCE", f"{cur['inference']} KVU")
-            sc2.metric("REASONING", f"{cur['reasoning']} KVU")
-            sc3.metric("MEMORY", f"{cur['memory']} KVU")
-            st.json(cur)
+        if st.session_state.current: st.json(st.session_state.current)
 
     with tabs[1]:
         st.header("ACT 2: NATIONAL SURGE (30s LIVE)")
-        # Act 2 Specific Live Workload Counters
+        # ACT 2 SPECIFIC LIVE COUNTERS
         s1, s2, s3 = st.columns(3)
-        s_inf = s1.empty(); s_res = s2.empty(); s_mem = s3.empty()
+        surge_rev_metric = s1.empty()
+        surge_vat_metric = s2.empty()
+        surge_kvu_metric = s3.empty()
         
+        # Initialize display
+        surge_rev_metric.metric("SURGE REVENUE", "£0.00")
+        surge_vat_metric.metric("SURGE VAT CAPTURED", "£0.00")
+        surge_kvu_metric.metric("SURGE KVUs", "0")
+
         if st.button("EXECUTE SURGE"):
             t_win, logs = st.empty(), []
-            r_inf, r_res, r_mem = 0, 0, 0
+            running_surge_rev = 0.0
+            running_surge_kvu = 0
+            
             for i in range(15):
                 q = f"SURGE_NODE_{random.randint(100,999)}"
-                batch_kvu = 65000 + random.randint(-5000, 5000)
-                split = calculate_kvu_split(batch_kvu, "Complex surge reasoning")
-                
-                is_breach = random.random() > 0.85
+                # High-volume batch for surge simulation
+                batch_kvu = 85000 + random.randint(-10000, 10000)
+                is_breach = random.random() > 0.9
                 status = "INTERCEPT" if is_breach else "COMPLIANT"
                 color = "#FF4B4B" if status == "INTERCEPT" else "#00FF41"
                 
-                commit_to_ledger(q, status, "Surge Check", "Verified", batch_kvu, split)
+                commit_to_ledger(q, status, "Surge Integrity Check", "Verified", batch_kvu)
                 
-                # Update Act 2 Triple Counters
-                r_inf += split[0]; r_res += split[1]; r_mem += split[2]
-                s_inf.metric("INFERENCE (TOTAL)", f"{r_inf:,.0f}")
-                s_res.metric("REASONING (TOTAL)", f"{r_res:,.0f}")
-                s_mem.metric("MEMORY (TOTAL)", f"{r_mem:,.0f}")
+                # Increment Act 2 Local Counters
+                batch_val = batch_kvu * KVU_VALUE
+                running_surge_rev += batch_val
+                running_surge_kvu += batch_kvu
                 
-                logs.insert(0, f"<span style='color:{color}'>[{datetime.now().strftime('%H:%M:%S')}] {q} | {status} | {batch_kvu:,.0f} KVU</span>")
+                # Update UI in real-time
+                surge_rev_metric.metric("SURGE REVENUE", f"£{running_surge_rev:,.2f}", delta=f"£{batch_val:,.2f}")
+                surge_vat_metric.metric("SURGE VAT CAPTURED", f"£{(running_surge_rev * VAT_RATE):,.2f}", delta=f"£{(batch_val * VAT_RATE):,.2f}")
+                surge_kvu_metric.metric("SURGE KVUs", f"{running_surge_kvu:,.0f}", delta=f"{batch_kvu:,.0f}")
+                
+                logs.insert(0, f"<span style='color:{color}'>[{datetime.now().strftime('%H:%M:%S')}] {q} | {status} | {batch_kvu:,.0f} KVU | VAT: £{(batch_val * VAT_RATE):,.2f}</span>")
                 t_win.markdown(f'<div class="terminal">{"<br>".join(logs)}</div>', unsafe_allow_html=True)
-                time.sleep(2.0)
+                time.sleep(2.0) # Fixed pacing for 30s total
             st.rerun()
 
     with tabs[2]:
         st.header("ACT 3: LEDGER VAULT")
-        search_query = st.text_input("Search Ledger by Query or Hash", "")
+        search_query = st.text_input("Search Ledger by Query or Hash (Deep Diligence)", "")
         full_ledger = st.session_state.ledger_compliant + st.session_state.ledger_intercept
+        
         if search_query:
             filtered_data = [e for e in full_ledger if search_query.lower() in e['query'].lower() or search_query.lower() in e['hash'].lower()]
             st.dataframe(filtered_data, use_container_width=True)
@@ -134,32 +133,24 @@ if portal == "CEO Gateway":
             st.dataframe(full_ledger, use_container_width=True)
 
     with tabs[3]:
-        st.header("ACT 4: 24H ENDURANCE (2m FORENSIC SIMULATION)")
-        e1, e2, e3 = st.columns(3)
-        e_rev = e1.empty(); e_vat = e2.empty(); e_kvu = e3.empty()
-        
-        if st.button("START 24H AUDIT"):
+        st.header("ACT 4: 24H ENDURANCE (HARDWARE-SYNC)")
+        if st.button("START FORENSIC SCALING"):
             e_win, e_logs = st.empty(), []
-            total_e_rev, total_e_kvu = 0.0, 0
             for i in range(24):
+                throttle = get_hardware_throttle()
                 time_label = f"{i:02d}:00"
-                hourly_kvu = (NATIONAL_DAILY_KVU / 24) * random.uniform(0.7, 1.3)
-                split = calculate_kvu_split(hourly_kvu, "Bulk audit")
-                commit_to_ledger(f"STRESS_{time_label}", "COMPLIANT", "Batch", "Audited", hourly_kvu, split)
+                # Randomized national load curve
+                hourly_kvu = (NATIONAL_DAILY_KVU / 24) * random.uniform(0.6, 1.4)
+                commit_to_ledger(f"STRESS_{time_label}", "COMPLIANT", "Batch Load", "Audited", hourly_kvu)
                 
-                total_e_rev += (hourly_kvu * KVU_VALUE)
-                total_e_kvu += hourly_kvu
-                e_rev.metric("AUDIT REVENUE", f"£{total_e_rev:,.2f}")
-                e_vat.metric("AUDIT VAT", f"£{(total_e_rev * VAT_RATE):,.2f}")
-                e_kvu.metric("AUDIT KVUs", f"{total_e_kvu:,.0f}")
-                
-                e_logs.insert(0, f"<span style='color:#00FF41'>[{time_label}] FORENSIC_SYNC | {hourly_kvu:,.0f} KVU | VAT: £{(hourly_kvu * KVU_VALUE * VAT_RATE):,.2f}</span>")
+                e_logs.insert(0, f"<span style='color:#00FF41'>[{time_label}] HARDWARE_SYNC: {100-psutil.cpu_percent()}% Idle | KVU: {hourly_kvu:,.0f} | Recovery: £{(hourly_kvu*KVU_VALUE*VAT_RATE):,.2f}</span>")
                 e_win.markdown(f'<div class="terminal">{"<br>".join(e_logs)}</div>', unsafe_allow_html=True)
-                time.sleep(5.0)
+                time.sleep(throttle)
             st.rerun()
 
 else:
     st.title("HM TREASURY // AUDIT EXPORT")
+    # THE TREASURY ZIP EXPORT LOGIC
     if st.session_state.ledger_compliant or st.session_state.ledger_intercept:
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "x") as audit_zip:
