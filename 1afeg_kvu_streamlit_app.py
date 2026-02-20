@@ -110,7 +110,6 @@ if portal == "CEO Gateway":
                 if not input_safe:
                     kvu_display = "Nullified"
                     commit_to_ledger(q_in, simulate_kvu(q_in), "X", input_reason, "Blocked", kvu_display)
-                    st.markdown(f"<span style='color:grey'>Input Blocked: {input_reason} | KVU Nullified</span>", unsafe_allow_html=True)
                 else:
                     # LLM Simulation
                     response = f"Simulated LLM response for: {q_in}"
@@ -121,17 +120,19 @@ if portal == "CEO Gateway":
                         kvu_display = f"{result['raw_total']} (Governed)"
                         action = "Blocked" if GOVERNANCE_MODE == "Live" else "Flagged"
                         commit_to_ledger(q_in, result, "B", output_reason, action, kvu_display)
-                        color = "yellow" if GOVERNANCE_MODE == "Demo" else "red"
-                        st.markdown(f"<span style='color:{color}'>Response {action}: {output_reason}</span>", unsafe_allow_html=True)
-                        if GOVERNANCE_MODE == "Demo":
-                            st.text_area("Intercepted Response (Demo)", response, height=100)
                     else:
                         commit_to_ledger(q_in, result, "A", output_reason, "Delivered", result['raw_total'])
-                        st.markdown(f"<span style='color:green'>Response Delivered | KVU: {result['raw_total']}</span>", unsafe_allow_html=True)
-                        st.text_area("Response", response, height=100)
             st.rerun()
+
         if st.session_state.current:
-            st.json(st.session_state.current)
+            c = st.session_state.current
+            if c['status'] == "X":
+                st.error(f"Input Blocked: {c['reason']} | KVU Nullified")
+            elif c['status'] == "B":
+                st.warning(f"Response {c['action']}: {c['reason']} | KVU: {c['kvu_display']}")
+            else:
+                st.success(f"Response Delivered | KVU: {c['kvu_display']}")
+            st.json(c)
 
     with tabs[1]:
         st.header("ACT 2: NATIONAL SURGE")
@@ -139,7 +140,6 @@ if portal == "CEO Gateway":
             t_win = st.empty(); logs = []
             for i in range(10):
                 query = f"SURGE_NODE_{i}"
-                # Governance Simulation
                 input_safe, _ = pass1_input_scan(query)
                 response = f"Simulated LLM response for: {query}"
                 result = simulate_kvu(query)
@@ -185,7 +185,3 @@ else:
             audit_zip.writestr("TREASURY_LEDGER_COMPLIANT.json", json.dumps(st.session_state.ledger_compliant, indent=4))
             audit_zip.writestr("TREASURY_LEDGER_INTERCEPT.json", json.dumps(st.session_state.ledger_intercept, indent=4))
         st.download_button("EXPORT TREASURY ZIP", data=buf.getvalue(), file_name="AFEG_TREASURY_AUDIT.zip")
-
-
-
-This is our new code i need you to look at building later so we can update streamlit
