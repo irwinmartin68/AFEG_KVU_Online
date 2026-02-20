@@ -1,9 +1,10 @@
 import streamlit as st
-import time, hashlib, json, random, io, zipfile, psutil
+import time, hashlib, json, random, io, zipfile
 from datetime import datetime
 
 # ------------------ CONFIG & RESEARCH ------------------
 DAU_UK, QUERIES_PER_USER = 4_000_000, 5
+# Anchor: £2.6M VAT daily floor
 NATIONAL_DAILY_KVU = (DAU_UK * QUERIES_PER_USER) * 650
 KVU_VALUE, VAT_RATE = 0.001, 0.20
 
@@ -18,10 +19,6 @@ def pass2_output_scan(response):
         return False, "Output Risk (Filter)"
     return True, "Safe"
 
-def get_hardware_throttle():
-    cpu_usage = psutil.cpu_percent(interval=0.1)
-    return 0.1 + (cpu_usage / 100) # Directly ties audit speed to laptop power
-
 # ------------------ STATE ------------------
 if "ledger_compliant" not in st.session_state: st.session_state.ledger_compliant = []
 if "ledger_intercept" not in st.session_state: st.session_state.ledger_intercept = []
@@ -29,16 +26,16 @@ if "session_rev" not in st.session_state: st.session_state.session_rev = 0.0
 if "current" not in st.session_state: st.session_state.current = None
 
 def commit_to_ledger(query, status, reason, action, kvu_amt):
-    entry = {"query": query, "timestamp": datetime.now().strftime("%H:%M:%S"),
-             "kvu": kvu_amt, "value": kvu_amt * KVU_VALUE, "vat": (kvu_amt * KVU_VALUE) * VAT_RATE,
-             "status": status, "reason": reason, "action": action,
-             "hash": hashlib.sha256(str(random.random()).encode()).hexdigest()}
-    
+    entry = {
+        "query": query, "timestamp": datetime.now().strftime("%H:%M:%S"),
+        "kvu": kvu_amt, "value": kvu_amt * KVU_VALUE, "vat": (kvu_amt * KVU_VALUE) * VAT_RATE,
+        "status": status, "reason": reason, "action": action,
+        "hash": hashlib.sha256(str(random.random()).encode()).hexdigest()
+    }
     if status == "COMPLIANT":
         st.session_state.ledger_compliant.append(entry)
     else:
         st.session_state.ledger_intercept.append(entry)
-    
     st.session_state.session_rev += entry["value"]
     st.session_state.current = entry
 
@@ -97,17 +94,17 @@ if portal == "CEO Gateway":
             st.success("ACCESS GRANTED: KITCHEN LOGIC & TREASURY PIPE SCHEMATICS")
 
     with tabs[3]:
-        st.header("ACT 4: 24H ENDURANCE (HARDWARE-SYNC)")
-        if st.button("START FORENSIC SCALING"):
+        st.header("ACT 4: 24H ENDURANCE (120s SIMULATION)")
+        if st.button("START 2-MINUTE FORENSIC AUDIT"):
             e_win, e_logs = st.empty(), []
             hourly_load = NATIONAL_DAILY_KVU / 24
+            # 24 hours / 5 seconds per hour = 120 seconds (2 minutes)
             for i in range(24):
-                throttle = get_hardware_throttle() # Proves laptop power dependency
                 time_label = f"{i:02d}:00"
                 commit_to_ledger(f"STRESS_{time_label}", "COMPLIANT", "Batch", "Audited", hourly_load)
-                e_logs.insert(0, f"<span style='color:#00FF41'>[{time_label}] HARDWARE_SYNC: {100-psutil.cpu_percent()}% Idle | Audit OK</span>")
+                e_logs.insert(0, f"<span style='color:#00FF41'>[{time_label}] TEMPORAL_SYNC | AUDIT VALIDATED | VAT: £{hourly_load*KVU_VALUE*VAT_RATE:,.2f}</span>")
                 e_win.markdown(f'<div class="terminal">{"<br>".join(e_logs)}</div>', unsafe_allow_html=True)
-                time.sleep(throttle)
+                time.sleep(5.0) 
             st.rerun()
 
 else:
