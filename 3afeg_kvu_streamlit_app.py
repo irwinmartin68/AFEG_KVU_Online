@@ -1,6 +1,8 @@
 import streamlit as st
 import hashlib, json, random, time, io, zipfile
-from datetime import datetime
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
 
 # -----------------------------
 # CORE LOGIC (THE KITCHEN LOGIC ENGINE)
@@ -8,7 +10,7 @@ from datetime import datetime
 def calculate_complexity_kvu(query, mode):
     base = 400.0
     q = query.lower()
-    # Categorical Split for IP Protection & Metering
+    # Categorical Logic Split
     if any(w in q for w in ["why", "how", "explain", "audit"]):
         inf, res, mem = base * 0.8, base * 2.5, base * 0.5
         label, heat = "Deep Reasoning", "high"
@@ -32,9 +34,7 @@ if "total_kvu" not in st.session_state: st.session_state.total_kvu = 0.0
 if "ledger" not in st.session_state: st.session_state.ledger = []
 if "cat_metrics" not in st.session_state: st.session_state.cat_metrics = {"inf": 0.0, "res": 0.0, "mem": 0.0}
 
-# -----------------------------
-# DYNAMIC STYLING (THE HEATMAP)
-# -----------------------------
+# Heatmap Pulse Styling
 st.markdown("""<style>
     .heat-high { background-color: rgba(255, 69, 0, 0.1); border: 2px solid #FF4500; padding: 20px; border-radius: 10px; animation: pulse 2s infinite; }
     .heat-low { background-color: rgba(0, 255, 65, 0.05); border: 2px solid #00FF41; padding: 20px; border-radius: 10px; }
@@ -54,7 +54,7 @@ def update_all_metrics():
     gross_placeholder.metric("GROSS REVENUE", f"£{st.session_state.total_kvu * 0.001:,.2f}")
     vat_placeholder.metric("VAT CAPTURE", f"£{(st.session_state.total_kvu * 0.001 * 0.2):,.2f}")
     kvu_placeholder.metric("VALIDATED KVUs", f"{st.session_state.total_kvu:,.0f}")
-    # Update Sidebar Grid Categories
+    # Update Sidebar Grid
     s_inf.metric("Inference Engine", f"{st.session_state.cat_metrics['inf']:,.1f}")
     s_res.metric("Reasoning Layer", f"{st.session_state.cat_metrics['res']:,.1f}")
     s_mem.metric("Memory Vault", f"{st.session_state.cat_metrics['mem']:,.1f}")
@@ -70,7 +70,7 @@ kvu_placeholder = h3.empty()
 
 update_all_metrics()
 
-tabs = st.tabs(["ACT 1: GATEWAY", "ACT 2: SURGE", "ACT 3: LEDGER VAULT", "ACT 4: ECONOMIC ENGINE"])
+tabs = st.tabs(["ACT 1: GATEWAY", "ACT 2: SURGE", "ACT 3: LEDGER VAULT", "ACT 4: 24HR NATIONAL SIM"])
 
 # --- ACT 1: GATEWAY AUDIT ---
 with tabs[0]:
@@ -78,12 +78,10 @@ with tabs[0]:
     gate_mode = st.radio("Gateway State:", ["Live Enforcement", "Demo Simulation"], horizontal=True)
     user_query = st.text_input("Enter Audit Query:", key="gate_input")
     
-    # SUBMIT QUERY BUTTON
     if st.button("SUBMIT QUERY") and user_query:
         inf, res, mem, label, heat = calculate_complexity_kvu(user_query, gate_mode)
         total = inf + res + mem
         
-        # Update System State
         st.session_state.total_kvu += total
         st.session_state.cat_metrics['inf'] += inf
         st.session_state.cat_metrics['res'] += res
@@ -97,9 +95,8 @@ with tabs[0]:
             "Type": label,
             "Hash": hashlib.sha256(user_query.encode()).hexdigest()[:12]
         }
-        st.session_state.ledger.insert(0, entry) # Log to Vault
+        st.session_state.ledger.insert(0, entry)
         update_all_metrics()
-        
         st.markdown(f'<div class="heat-{heat}"><b>{label} detected.</b> Evidence Hash: <code>{entry["Hash"]}</code></div>', unsafe_allow_html=True)
 
 # --- ACT 2: NATIONAL SURGE ---
@@ -107,9 +104,10 @@ with tabs[1]:
     st.subheader("ACT 2: NATIONAL SURGE SIMULATION")
     if st.button("EXECUTE 60s SURGE"):
         prog = st.progress(0)
-        surge_status = st.empty()
+        surge_log_container = st.empty() # LIVE LEDGER WINDOW FOR ACT 2
+        current_surge_data = []
+        
         for i in range(30):
-            # Batch Simulation Logic
             b_inf, b_res, b_mem = random.uniform(5000, 10000), random.uniform(8000, 15000), random.uniform(1000, 3000)
             batch_total = b_inf + b_res + b_mem
             
@@ -118,44 +116,61 @@ with tabs[1]:
             st.session_state.cat_metrics['res'] += b_res
             st.session_state.cat_metrics['mem'] += b_mem
             
-            st.session_state.ledger.insert(0, {
+            surge_entry = {
                 "Time": datetime.now().strftime("%H:%M:%S"),
                 "Origin": "National Surge",
                 "Query": f"Batch Cluster #{i+1:02d}",
                 "KVU": round(batch_total, 2),
-                "Type": "Synthetic Aggregate",
                 "Hash": hashlib.md5(str(i).encode()).hexdigest()[:12]
-            })
+            }
+            st.session_state.ledger.insert(0, surge_entry)
+            current_surge_data.insert(0, surge_entry)
             
             update_all_metrics()
             prog.progress((i + 1) / 30)
-            surge_status.text(f"Batch {i+1}/30 Processing... Counters Jumping.")
+            surge_log_container.dataframe(current_surge_data, use_container_width=True, height=300)
             time.sleep(1)
-        st.success("National Surge Logged to Vault.")
+        st.success("National Surge Complete. Vault Synchronized.")
 
 # --- ACT 3: SEARCHABLE LEDGER VAULT ---
 with tabs[2]:
     st.subheader("ACT 3: SEARCHABLE LEDGER VAULT")
     if st.session_state.ledger:
-        # Dataframe allows for the search bar and interactive filtering
-        st.dataframe(st.session_state.ledger, use_container_width=True)
+        st.dataframe(
+            st.session_state.ledger, 
+            use_container_width=True, 
+            hide_index=True
+        ) # Native search/filter bar is active here
     else:
-        st.info("Vault is empty. Submit a query or run surge to generate audit tickets.")
+        st.info("Vault is empty. Submit a query to generate an Audit Ticket.")
 
-# --- ACT 4: THE ECONOMIC ENGINE ---
+# --- ACT 4: 24HR NATIONAL SIMULATION ---
 with tabs[3]:
-    st.subheader("ACT 4: THE ECONOMIC ENGINE (ROI)")
-    if st.session_state.total_kvu > 0:
-        daily_capture = st.session_state.total_kvu * 0.001
-        annual_projection = daily_capture * 365 * 1000 
+    st.subheader("ACT 4: 24-HOUR NATIONAL FISCAL SIMULATION")
+    if st.button("RUN 24-HOUR ECONOMIC PROJECTION"):
+        chart_placeholder = st.empty()
+        stat_placeholder = st.empty()
         
-        ec1, ec2 = st.columns(2)
-        ec1.metric("Current Session Capture", f"£{daily_capture:,.2f}")
-        ec2.metric("Annual National VAT Recovery", f"£{(annual_projection * 0.2):,.0f}")
+        # Build 24 hour day-night curve
+        hours = [datetime.now().replace(hour=h, minute=0, second=0) for h in range(24)]
+        base_traffic = [max(1000, 5000 * np.sin(np.pi * (h-6)/12)) for h in range(24)]
+        
+        sim_data = []
+        sim_total_kvu = 0
+        
+        for i, h in enumerate(hours):
+            hourly_kvu = base_traffic[i] * random.uniform(75, 125)
+            sim_total_kvu += hourly_kvu
+            sim_data.append({"Hour": h.strftime("%H:00"), "VAT Revenue": (hourly_kvu * 0.001 * 0.2)})
+            
+            df_sim = pd.DataFrame(sim_data)
+            chart_placeholder.line_chart(df_sim.set_index("Hour")["VAT Revenue"])
+            stat_placeholder.markdown(f"### Current Projection: £{(sim_total_kvu * 0.001 * 0.2):,.2f} VAT Recovery")
+            time.sleep(0.1)
         
         st.divider()
-        st.write("### Regulatory Audit Export")
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w") as zf:
-            zf.writestr("AFEG_V7_FULL_AUDIT.json", json.dumps(st.session_state.ledger, indent=4))
-        st.download_button("DOWNLOAD ALL AUDIT TICKETS", data=buf.getvalue(), file_name="AFEG_V7_AUDIT.zip")
+        f1, f2 = st.columns(2)
+        f1.metric("Projected 24hr Revenue", f"£{sim_total_kvu * 0.001:,.2f}")
+        f2.metric("Projected Treasury VAT", f"£{(sim_total_kvu * 0.001 * 0.2):,.2f}")
+        
+        st.download_button("EXPORT FISCAL MODEL", data=json.dumps(sim_data), file_name="AFEG_24HR_MODEL.json")
