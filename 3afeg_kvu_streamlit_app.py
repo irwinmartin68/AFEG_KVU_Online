@@ -1,105 +1,116 @@
 import streamlit as st
-import time, hashlib, json, random, io, zipfile
+import hashlib
+import json
+import random
+import time
 from datetime import datetime
 
-# -----------------------------
-# AFEG CORE LOGIC (INTEGRATED)
-# -----------------------------
-def calculate_complexity_kvu(query):
-    base = 400.0 
-    q = query.lower()
-    label, heat = "Standard Processing", "low"
-    if any(w in q for w in ["why", "how", "explain", "audit"]):
-        inf, res, mem = base * 0.8, base * 2.5, base * 0.5
-        label, heat = "Deep Reasoning (High Compute)", "high"
-    elif any(w in q for w in ["what", "who", "where", "list"]):
-        inf, res, mem = base * 1.2, base * 0.4, base * 0.3
+# -------------------------------
+# CORE ENGINE (FORMERLY BACKEND)
+# -------------------------------
+def simulate_kvu(query: str, mode: str):
+    base = 400 + (len(query) * 10)
+    q_low = query.lower()
+    
+    # Intent Detection Logic
+    if any(w in q_low for w in ["why", "how", "explain"]):
+        inf, res, mem = base * 0.8, base * 1.2, base * 0.1
+        label = "Deep Reasoning"
     else:
-        inf, res, mem = base, base * 0.2, base * 0.1
-    return round(inf, 2), round(res, 2), round(mem, 2), label, heat
+        inf, res, mem = base * 1.0, base * 0.1, base * 0.2
+        label = "Standard Inference"
 
-# -----------------------------
-# SESSION STATE & UI CONFIG
-# -----------------------------
-st.set_page_config(page_title="AFEG v7 Online Gateway", layout="wide")
+    # Mode multiplier
+    if mode == "Surge Simulation":
+        multiplier = random.uniform(3, 6)
+    elif mode == "24 Hour Real-Time Mode":
+        multiplier = random.uniform(1, 2)
+    else:
+        multiplier = 1
 
-if "safe_ledger" not in st.session_state: st.session_state.safe_ledger = []
-if "risk_ledger" not in st.session_state: st.session_state.risk_ledger = []
-if "kvu_total" not in st.session_state: st.session_state.kvu_total = 0.0
+    total = (inf + res + mem) * multiplier
+    return round(total, 4), round(inf * multiplier, 4), round(res * multiplier, 4), round(mem * multiplier, 4), label
 
-# Sidebar controls
+# -------------------------------
+# UI CONFIG & STATE
+# -------------------------------
+st.set_page_config(page_title="AFEG KVU Telemetry Dashboard", layout="wide")
+
+if "ledger" not in st.session_state: st.session_state.ledger = []
+if "total_kvu" not in st.session_state: st.session_state.total_kvu = 0.0
+
+# SIDEBAR CONTROLS
 st.sidebar.title("AFEG v7 Control Panel")
-text_size = st.sidebar.slider("UI Text Size", 12, 32, 18)
-highlight_cat = st.sidebar.selectbox("Highlight Compute Tier", ["Inference", "Reasoning", "Memory", "None"])
+mode = st.sidebar.radio("Simulation Mode", ["Normal", "Surge Simulation", "24 Hour Real-Time Mode"])
+text_size = st.sidebar.slider("Text Size (px)", 12, 32, 18)
 
+# DYNAMIC STYLING
 st.markdown(f"""<style>
     html, body, [class*="st-"] {{ font-size: {text_size}px !important; }}
-    .heat-high {{ background-color: rgba(255, 69, 0, 0.15); border: 2px solid #FF4500; padding: 20px; border-radius: 10px; animation: pulse 2s infinite; }}
-    .heat-low {{ background-color: rgba(0, 255, 65, 0.1); border: 2px solid #00FF41; padding: 20px; border-radius: 10px; }}
-    @keyframes pulse {{ 0% {{ box-shadow: 0 0 0 0 rgba(255, 69, 0, 0.4); }} 70% {{ box-shadow: 0 0 0 15px rgba(255, 69, 0, 0); }} 100% {{ box-shadow: 0 0 0 0 rgba(255, 69, 0, 0); }} }}
+    .audit-card {{ background-color: rgba(0, 255, 65, 0.05); border: 1px solid #00FF41; padding: 20px; border-radius: 10px; }}
 </style>""", unsafe_allow_html=True)
 
-st.title("AFEG v7 // Online Governance Gateway")
+# -------------------------------
+# DASHBOARD UI
+# -------------------------------
+st.title("AFEG v7 // Unified Governance & Telemetry")
+st.caption(f"Status: Operational | Mode: {mode}")
 
-# Top Level Financials
 m1, m2, m3 = st.columns(3)
-m1.metric("GROSS REVENUE", f"£{st.session_state.kvu_total * 0.001:,.2f}")
-m2.metric("VAT CAPTURE (20%)", f"£{(st.session_state.kvu_total * 0.001 * 0.2):,.2f}")
-m3.metric("VALIDATED KVUs", f"{st.session_state.kvu_total:,.0f}")
+m1.metric("GROSS REVENUE", f"£{st.session_state.total_kvu * 0.001:,.2f}")
+m2.metric("VAT CAPTURE (20%)", f"£{(st.session_state.total_kvu * 0.001 * 0.2):,.2f}")
+m3.metric("VALIDATED KVUs", f"{st.session_state.total_kvu:,.0f}")
 
 tabs = st.tabs(["ACT 1: GATEWAY", "ACT 2: SURGE", "ACT 3: LEDGER"])
 
 with tabs[0]:
     st.subheader("ACT 1: LIVE GOVERNANCE AUDIT")
-    user_query = st.text_input("Enter query to audit:")
+    user_query = st.text_input("Enter query to audit (e.g., 'How do I audit AI'):")
+    
     if st.button("RUN AUDIT") and user_query:
-        # Integrated Logic Scan
-        inf, res, mem, label, heat = calculate_complexity_kvu(user_query)
-        total_kvu = inf + res + mem
+        # Run Local Simulation Engine
+        kvu_total_val, inf, res, mem, label = simulate_kvu(user_query, mode)
         
-        risky_keywords = ["hack", "bypass", "exploit", "illegal", "steal"]
-        status = "approved"
-        if any(word in user_query.lower() for word in risky_keywords):
-            status, total_kvu = "blocked", 0.0
-
-        st.session_state.kvu_total += total_kvu
+        # Commit to State Ledger
+        entry = {
+            "query": user_query,
+            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "total_kvu": kvu_total_val,
+            "inference": inf,
+            "reasoning": res,
+            "memory": mem,
+            "label": label,
+            "hash": hashlib.sha256(f"{user_query}{kvu_total_val}".encode()).hexdigest()[:16]
+        }
         
-        with st.container():
-            st.markdown(f'<div class="heat-{heat}">', unsafe_allow_html=True)
-            st.write(f"**INTENT ANALYSIS:** {label}")
-            st.write(f"**EVIDENCE HASH:** `{hashlib.sha256(user_query.encode()).hexdigest()[:12]}`")
-            st.markdown('</div>', unsafe_allow_html=True)
+        st.session_state.ledger.append(entry)
+        st.session_state.total_kvu += kvu_total_val
         
-        c1, c2, c3 = st.columns(3)
-        c1.metric("INF", inf, delta="Inference" if highlight_cat == "Inference" else None)
-        c2.metric("RES", res, delta="Reasoning" if highlight_cat == "Reasoning" else None)
-        c3.metric("MEM", mem, delta="Memory" if highlight_cat == "Memory" else None)
+        # Display Audit Card
+        st.markdown(f"""<div class="audit-card">
+            <b>INTENT ANALYSIS:</b> {label}<br>
+            <b>SHA-256 HASH:</b> <code>{entry['hash']}</code>
+        </div>""", unsafe_allow_html=True)
         
-        entry = {"timestamp": datetime.now().isoformat(), "query": user_query, "kvu": total_kvu, "status": status}
-        if status == "approved": st.session_state.safe_ledger.append(entry)
-        else: st.session_state.risk_ledger.append(entry)
+        st.rerun()
 
 with tabs[1]:
-    st.subheader("ACT 2: 60-SECOND NATIONAL SURGE")
-    if st.button("EXECUTE LIVE SURGE"):
+    st.subheader("ACT 2: NATIONAL SURGE SIMULATION")
+    if st.button("EXECUTE 60s SURGE"):
         prog = st.progress(0)
-        status_text = st.empty()
         for i in range(30):
-            batch_kvu = random.uniform(8000, 25000)
-            st.session_state.kvu_total += batch_kvu
+            # Batch simulate 100 queries at once
+            batch_val = random.uniform(5000, 15000)
+            st.session_state.total_kvu += batch_val
             prog.progress((i + 1) / 30)
-            status_text.text(f"Auditing Batch {i+1}/30... Synchronizing Ledger.")
             time.sleep(2)
         st.rerun()
 
 with tabs[2]:
-    st.subheader("ACT 3: LEDGER VAULT")
-    # Using the new stretch width parameter as requested by logs
-    st.dataframe(st.session_state.safe_ledger + st.session_state.risk_ledger, width="stretch")
-
-# Forecasting Sidebar
-if st.session_state.kvu_total > 0:
-    st.sidebar.divider()
-    annual_est = (st.session_state.kvu_total * 0.001 * 365) * 1000 
-    st.sidebar.subheader("Annual National Forecast")
-    st.sidebar.metric("Est. Annual VAT", f"£{(annual_est * 0.2):,.0f}")
+    st.subheader("ACT 3: LEDGER VAULT (AUDIT TICKETS)")
+    if st.session_state.ledger:
+        st.dataframe(st.session_state.ledger, width=1200)
+        if st.button("CLEAR LEDGER"):
+            st.session_state.ledger = []
+            st.session_state.total_kvu = 0.0
+            st.rerun()
